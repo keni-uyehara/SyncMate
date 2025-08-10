@@ -3,6 +3,9 @@ import { UserAuthProvider } from './context/userAuthContext'
 import Login from './pages/Login'
 import './App.css'
 import { useState, useEffect } from 'react'
+import TeamLeadPortal from "./pages/Dashboard";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Dashboard from './pages/TeamLeadPortal'
 
 function App() {
   console.log('App component rendering');
@@ -59,21 +62,25 @@ VITE_APPID=your-app-id`}
   }
   
   return (
-    <UserAuthProvider>
-      <Router>
-        <div className="App" style={{minHeight: '100vh', width: '100vw'}}>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/" element={<Navigate to="/login" replace />} />
-            {/* Add more routes here as needed */}
-            <Route path="/data team/homepage" element={<div style={{padding: '20px'}}>Data Team Homepage</div>} />
-            <Route path="/team lead/homepage" element={<div style={{padding: '20px'}}>Team Lead Homepage</div>} />
-            <Route path="/profile" element={<div style={{padding: '20px'}}>Profile Page</div>} />
-          </Routes>
-        </div>
-      </Router>
-    </UserAuthProvider>
-  )
+  <UserAuthProvider>
+    <Router>
+      <div className="App" style={{ minHeight: "100vh", width: "100vw" }}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          
+          <Route path="/teamLeadPortal" element={<TeamLeadPortal />} />
+
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+          {/* Existing routes */}
+          <Route path="/data team/homepage" element={<div style={{ padding: "20px" }}>Data Team Homepage</div>} />
+          <Route path="/team lead/homepage" element={<div style={{ padding: "20px" }}>Team Lead Homepage</div>} />
+          <Route path="/profile" element={<div style={{ padding: "20px" }}>Profile Page</div>} />
+        </Routes>
+      </div>
+    </Router>
+  </UserAuthProvider>
+);
 }
 
 export default App
