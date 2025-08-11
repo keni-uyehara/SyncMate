@@ -3,9 +3,10 @@ import { UserAuthProvider } from './context/userAuthContext'
 import Login from './pages/Login'
 import './App.css'
 import { useState, useEffect } from 'react'
-import TeamLeadPortal from "./pages/Dashboard";
-import ProtectedRoute from "./components/ProtectedRoute";
-import Dashboard from './pages/TeamLeadPortal'
+import TeamLeadPortal from "./components/team-lead-portal";
+import DataTeamPortal from "./components/data-team-portal";
+import PortalSelector from "./components/portal-selector";
+
 
 function App() {
   console.log('App component rendering');
@@ -68,7 +69,9 @@ VITE_APPID=your-app-id`}
         <Routes>
           <Route path="/login" element={<Login />} />
           
-          <Route path="/teamLeadPortal" element={<TeamLeadPortal />} />
+          <Route path="/dashboard" element={<PortalSelector />} />
+          <Route path="/team-lead-portal" element={<TeamLeadPortal />} />
+          <Route path="/data-team-portal" element={<DataTeamPortal />} />
 
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
 

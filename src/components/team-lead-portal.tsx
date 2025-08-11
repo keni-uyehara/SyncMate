@@ -16,16 +16,15 @@ import {
   Clock,
   CheckCircle,
   Lightbulb,
-  Database,
 } from "lucide-react"
-import DashboardNavigation from "./dashboard-navigation"
+import TeamLeadPortalNavigation from "./team-lead-portal-navigation"
 
-export default function DashboardSelector() {
-  const [selectedDashboard, setSelectedDashboard] = useState<string | null>(null)
+export default function TeamLeadPortal() {
+  const [selectedDashboard, setSelectedDashboard] = useState<"compliance" | "insights" | null>(null)
 
   // If a dashboard is selected, render the navigation component
   if (selectedDashboard) {
-    return <DashboardNavigation />
+    return <TeamLeadPortalNavigation initialView={selectedDashboard} onBack={() => setSelectedDashboard(null)} />
   }
 
   // Landing page with dashboard selection
@@ -98,7 +97,7 @@ export default function DashboardSelector() {
         </div>
 
         {/* Dashboard Selection Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-6xl mx-auto">
           {/* Compliance Operations Dashboard */}
           <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-blue-200">
             <CardHeader className="pb-4">
@@ -175,87 +174,6 @@ export default function DashboardSelector() {
               {/* Action Button */}
               <Button className="w-full" size="lg" onClick={() => setSelectedDashboard("compliance")}>
                 Access Compliance Operations
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Data Team Operational Dashboard */}
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-green-200">
-            <CardHeader className="pb-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <Database className="w-6 h-6 text-green-600" />
-                </div>
-                <div>
-                  <CardTitle className="text-xl">Data Team Operations</CardTitle>
-                  <CardDescription className="text-base">
-                    Monitor compliance issues, track resolution workflows, and manage data governance
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Key Features */}
-              <div className="space-y-3">
-                <h4 className="font-semibold text-gray-900">Key Features:</h4>
-                <div className="grid grid-cols-1 gap-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                    <span>Compliance Issue Tracking</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                    <span>Resolution Workflows</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                    <span>Root Cause Analysis</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                    <span>AI-Powered Insights</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Current Status */}
-              <div className="space-y-3">
-                <h4 className="font-semibold text-gray-900">Current Status:</h4>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between p-2 bg-red-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-red-600" />
-                      <span className="text-sm">23 Active Issues</span>
-                    </div>
-                    <Badge variant="destructive" className="text-xs">
-                      +3 this week
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                      <span className="text-sm">87% Resolution Rate</span>
-                    </div>
-                    <Badge variant="secondary" className="bg-green-100 text-green-800 text-xs">
-                      +5% improvement
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between p-2 bg-blue-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm">2.3d Avg Resolution</span>
-                    </div>
-                    <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-xs">
-                      -0.5d faster
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Button */}
-              <Button className="w-full" size="lg" onClick={() => setSelectedDashboard("data-team")}>
-                Access Data Team Operations
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </CardContent>
@@ -349,10 +267,10 @@ export default function DashboardSelector() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Clock className="w-5 h-5 text-blue-500" />
-                Recent Activity Across All Systems
+                Recent Activity Across Team Lead Systems
               </CardTitle>
               <CardDescription>
-                Latest updates from both compliance operations and strategic initiatives
+                Latest updates from compliance operations and strategic initiatives
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -400,7 +318,7 @@ export default function DashboardSelector() {
                       7 data alignment issues affecting digital banking timeline - requires attention
                     </p>
                     <Badge variant="outline" className="text-xs mt-1">
-                      Both Systems
+                      Compliance Operations
                     </Badge>
                   </div>
                 </div>

@@ -8,6 +8,9 @@ import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { KPICard } from "@/components/ui/kpi-card"
+import { DashboardHeader } from "@/components/ui/dashboard-header"
+
 import {
   TrendingUp,
   Users,
@@ -127,79 +130,52 @@ export default function InsightsDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Strategic Synergies Dashboard</h1>
-              <p className="text-gray-600">SyncMate - Business Insights & Collaboration Opportunities</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button variant="outline" size="sm">
-                <Download className="w-4 h-4 mr-2" />
-                Export Insights
-              </Button>
-              <Button size="sm">
-                <Lightbulb className="w-4 h-4 mr-2" />
-                Generate Report
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <DashboardHeader
+        title="Strategic Synergies Dashboard"
+        actions={[
+          {
+            label: "Export Insights",
+            icon: Download,
+            variant: "outline"
+          },
+          {
+            label: "Generate Report",
+            icon: Lightbulb
+          }
+        ]}
+      />
 
       <div className="p-6">
         {/* Key Metrics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Synergies</CardTitle>
-              <Target className="h-4 w-4 text-blue-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">12</div>
-              <p className="text-xs text-muted-foreground">
-                <span className="text-green-500">+3</span> new opportunities
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Revenue Potential</CardTitle>
-              <DollarSign className="h-4 w-4 text-green-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">₱8.2B</div>
-              <p className="text-xs text-muted-foreground">
-                <span className="text-green-500">+18%</span> from last quarter
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Customer Reach</CardTitle>
-              <Users className="h-4 w-4 text-purple-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">3.2M</div>
-              <p className="text-xs text-muted-foreground">
-                <span className="text-green-500">+25%</span> cross-entity customers
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg Readiness Score</CardTitle>
-              <Star className="h-4 w-4 text-yellow-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">88%</div>
-              <Progress value={88} className="mt-2" />
-            </CardContent>
-          </Card>
+          <KPICard
+            title="Active Synergies"
+            value="12"
+            icon={Target}
+            iconColor="text-blue-500"
+            change={{ value: "+3 new opportunities", isPositive: true }}
+          />
+          <KPICard
+            title="Revenue Potential"
+            value="₱8.2B"
+            icon={DollarSign}
+            iconColor="text-green-500"
+            change={{ value: "+18% from last quarter", isPositive: true }}
+          />
+          <KPICard
+            title="Customer Reach"
+            value="3.2M"
+            icon={Users}
+            iconColor="text-purple-500"
+            change={{ value: "+25% cross-entity customers", isPositive: true }}
+          />
+          <KPICard
+            title="Avg Readiness Score"
+            value="88%"
+            icon={Star}
+            iconColor="text-yellow-500"
+            progress={88}
+          />
         </div>
 
         {/* Main Content Tabs */}

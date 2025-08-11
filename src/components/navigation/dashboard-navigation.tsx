@@ -2,12 +2,13 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Activity, BarChart3, Settings, Bell, User } from "lucide-react"
-import TeamLeadDashboard from "../team-lead-dashboard"
-import InsightsDashboard from "../dashboards/insights-dashboard"
+import { Activity, BarChart3, Settings, Bell, User, Database } from "lucide-react"
+import TeamLeadDashboard from "../../pages/team lead/team-lead-compliance-dashboard"
+import InsightsDashboard from "../../pages/team lead/team-lead-insights-dashboard"
+import DataTeamOperationalDashboard from "../../pages/data team/data-team-operational-dashboard"
 
 export default function DashboardNavigation() {
-  const [activeView, setActiveView] = useState<"compliance" | "insights">("compliance")
+  const [activeView, setActiveView] = useState<"compliance" | "insights" | "data-team">("compliance")
 
   // Navigation Header Component (to avoid duplication)
   const NavigationHeader = () => (
@@ -38,6 +39,15 @@ export default function DashboardNavigation() {
                 <BarChart3 className="w-4 h-4" />
                 Strategic Insights
               </Button>
+              <Button
+                variant={activeView === "data-team" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setActiveView("data-team")}
+                className="flex items-center gap-2"
+              >
+                <Database className="w-4 h-4" />
+                Data Team Operations
+              </Button>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -61,8 +71,10 @@ export default function DashboardNavigation() {
       <NavigationHeader />
       {activeView === "compliance" ? (
         <TeamLeadDashboard />
-      ) : (
+      ) : activeView === "insights" ? (
         <InsightsDashboard />
+      ) : (
+        <DataTeamOperationalDashboard />
       )}
     </div>
   )

@@ -24,8 +24,9 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  Lightbulb,
 } from "lucide-react"
-
+import { DashboardHeader } from "../../components/ui/dashboard-header"
 export default function TeamLeadDashboard() {
   const recentReports = [
     {
@@ -86,26 +87,20 @@ export default function TeamLeadDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Team Lead Dashboard</h1>
-              <p className="text-gray-600">SyncMate - Compliance Monitoring & Report Management</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button variant="outline" size="sm">
-                <Download className="w-4 h-4 mr-2" />
-                Export Summary
-              </Button>
-              <Button size="sm">
-                <Upload className="w-4 h-4 mr-2" />
-                Import Report
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <DashboardHeader
+        title="Compliance Dashboard"
+        actions={[
+          {
+            label: "Export Insights",
+            icon: Download,
+            variant: "outline"
+          },
+          {
+            label: "Generate Report",
+            icon: Lightbulb
+          }
+        ]}
+      />
 
       <div className="p-6">
         {/* Key Metrics Cards - Read Only */}
