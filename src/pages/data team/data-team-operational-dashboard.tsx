@@ -464,84 +464,380 @@ export default function DataTeamOperationalDashboard() {
                         className="bg-black h-3 rounded-full"
                         style={{ width: `${item.value}%` }}
                       ></div>
-          </div>
-          <p className="text-xs text-gray-600">
-            {item.issues} Active {item.issues === 1 ? "issue" : "issues"}
-          </p>
-        </div>
-      ))}
-    </CardContent>
-  </Card>
-</TabsContent>
+                    </div>
+                    <p className="text-xs text-gray-600">
+                      {item.issues} Active {item.issues === 1 ? "issue" : "issues"}
+                    </p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          {/* Audit Trail Tab */}
+          <TabsContent value="audit-trail" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Audit Trail</CardTitle>
+                <CardDescription>
+                  Complete history of compliance actions and changes
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Entry 1 */}
+                <div className="flex justify-between p-4 border rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <div className="w-3 h-3 bg-green-500 rounded-full mt-1"></div>
+                    <div>
+                      <p className="font-medium text-sm">
+                        Issue COMP-003 Resolved
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        Ana Reyes updated credit scoring threshold for AC Energy green loans
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <Badge variant="outline">Threshold Update</Badge>
+                        <Badge variant="outline">BPI x AC Energy</Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 whitespace-nowrap">2 Hours ago</p>
+                </div>
+
+                {/* Entry 2 */}
+                <div className="flex justify-between p-4 border rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <div className="w-3 h-3 bg-blue-500 rounded-full mt-1"></div>
+                    <div>
+                      <p className="font-medium text-sm">
+                        Workflow Completed
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        Maria Santos completed field mapping validation for COMP-001
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <Badge variant="outline">Data Reconciliation</Badge>
+                        <Badge variant="outline">BPI x Ayala Land</Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 whitespace-nowrap">4 Hours ago</p>
+                </div>
+
+                {/* Entry 3 */}
+                <div className="flex justify-between p-4 border rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <div className="w-3 h-3 bg-yellow-500 rounded-full mt-1"></div>
+                    <div>
+                      <p className="font-medium text-sm">
+                        New Issue Flagged
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        System detected SME classification inconsistency between BPI and Globe
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <Badge variant="outline">Definition Mismatch</Badge>
+                        <Badge variant="outline">BPI x Globe</Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 whitespace-nowrap">6 Hours ago</p>
+                </div>
+              </CardContent>
+              {/* Pagination */}
+              <div className="flex justify-center mt-4 mb-8">
+                <nav className="flex items-center gap-2 text-sm">
+                  <button className="px-2 py-1 text-gray-400 cursor-not-allowed">
+                    ← Previous
+                  </button>
+                  <button className="px-3 py-1 bg-black text-white rounded">1</button>
+                  <button className="px-3 py-1 border rounded">2</button>
+                  <button className="px-3 py-1 border rounded">3</button>
+                  <span>…</span>
+                  <button className="px-3 py-1 border rounded">67</button>
+                  <button className="px-3 py-1 border rounded">68</button>
+                  <button className="px-2 py-1">Next →</button>
+                </nav>
+              </div>
+            </Card>
+          </TabsContent>
 
 
           {/* AI Insights Tab */}
-          <TabsContent value="ai-insights" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Bot className="w-5 h-5 text-purple-500" />
-                    <CardTitle>AI-Generated Insights</CardTitle>
+          {/* AI Insights Tab */}
+        <TabsContent value="ai-insights" className="space-y-6 mt-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Generated Compliance Report */}
+            <Card className="lg:col-span-2 shadow-sm">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg font-semibold">Generated Compliance Report</CardTitle>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
+                      🔄 Regenerate
+                    </Button>
+                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
+                      📤 Export
+                    </Button>
                   </div>
-                  <CardDescription>Machine learning analysis of compliance patterns and recommendations</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <h4 className="font-semibold text-blue-900 mb-2">Pattern Detection</h4>
-                    <p className="text-sm text-blue-800">
-                      AI detected 3 similar duplicate record issues in the past month. 
-                      Recommend implementing automated duplicate detection at data entry.
-                    </p>
-                  </div>
+                </div>
+                <CardDescription className="text-sm text-gray-600">
+                  AI analysis of current compliance landscape and recommendations
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6 text-sm">
+                {/* Executive Summary */}
+                <div>
+                  <h4 className="font-semibold text-purple-600 mb-2 text-base">Executive Summary</h4>
+                  <p className="text-gray-700 leading-relaxed">
+                    Based on analysis of 32 compliance issues across BPI and Ayala companies, the system has identified
+                    three critical patterns requiring immediate attention. The primary concern involves duplicate
+                    customer records between BPI and Ayala Land housing loan applications, affecting 15% of joint
+                    applications impacting regulatory reporting accuracy.
+                  </p>
+                </div>
 
-                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <h4 className="font-semibold text-green-900 mb-2">Optimization Opportunity</h4>
-                    <p className="text-sm text-green-800">
-                      Definition mismatch issues peak on Mondays. Consider scheduling 
-                      definition reviews earlier in the week.
-                    </p>
-                  </div>
+                {/* High Priority Recommendations */}
+                <div className="border-l-4 border-red-500 pl-4 bg-red-50/50 py-3 rounded-r-lg">
+                  <h4 className="font-semibold text-red-600 mb-2 text-base">High Priority Recommendations</h4>
+                  <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
+                    <li>Implement automated Customer ID reconciliation between BPI and Ayala Land Systems</li>
+                    <li>Establish unified SME classification criteria across Globe and BPI partnerships</li>
+                    <li>Update credit scoring threshold for green energy loans with AC Energy within 48 hours</li>
+                  </ul>
+                </div>
 
-                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <h4 className="font-semibold text-yellow-900 mb-2">Risk Alert</h4>
-                    <p className="text-sm text-yellow-800">
-                      Threshold update frequency is below recommended standards. 
-                      Consider quarterly automated reviews.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+                {/* Medium Priority Actions */}
+                <div className="border-l-4 border-yellow-500 pl-4 bg-yellow-50/50 py-3 rounded-r-lg">
+                  <h4 className="font-semibold text-yellow-600 mb-2 text-base">Medium Priority Actions</h4>
+                  <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
+                    <li>Standardise data glossary across all Ayala Companies (estimated 2 weeks effort)</li>
+                    <li>Implement quarterly policy alignment reviews to prevent threshold drift</li>
+                    <li>Enhance steward training on cross-entity data validation procedures</li>
+                  </ul>
+                </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Predictive Analytics</CardTitle>
-                  <CardDescription>Forecast compliance issues and resource needs</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-purple-600">78%</div>
-                    <p className="text-sm text-muted-foreground">Accuracy in predicting compliance issues</p>
-                  </div>
+                {/* Strategic Opportunities */}
+                <div className="border-l-4 border-green-500 pl-4 bg-green-50/50 py-3 rounded-r-lg">
+                  <h4 className="font-semibold text-green-600 mb-2 text-base">Strategic Opportunities</h4>
+                  <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
+                    <li>87% data alignment with Ayala Land enables expansion of joint housing products</li>
+                    <li>Improved Globe integration could unlock telco-banking synergies for 2.3M customers</li>
+                    <li>AC Energy partnerships shows potential ESG-compliant lending for portfolio growth</li>
+                  </ul>
+                </div>
 
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span>Predicted Issues (Next Week)</span>
-                      <span className="font-medium">5-8 new issues</span>
+                {/* Predicted Impact */}
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h4 className="font-semibold text-gray-800 mb-3 text-base">Predicted Impact</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="text-center">
+                      <p className="text-xs text-blue-600 font-medium mb-1">Resolution Time Reduction:</p>
+                      <p className="font-bold text-lg text-blue-700">-35%</p>
                     </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span>Resource Allocation</span>
-                      <span className="font-medium">2.5 FTE needed</span>
+                    <div className="text-center">
+                      <p className="text-xs text-blue-600 font-medium mb-1">Compliance Score Improvement:</p>
+                      <p className="font-bold text-lg text-blue-700">-35%</p>
                     </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span>Priority Focus</span>
-                      <span className="font-medium">Definition alignment</span>
+                    <div className="text-center">
+                      <p className="text-xs text-blue-600 font-medium mb-1">Cross-Entity Synergy Score:</p>
+                      <p className="font-bold text-lg text-blue-700">+12%</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-blue-600 font-medium mb-1">Risk Mitigation:</p>
+                      <p className="font-bold text-lg text-blue-700">+12%</p>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
+                </div>
+
+                {/* Report Footer */}
+                <p className="text-xs text-gray-500 pt-2 border-t">
+                  Report generated on January 15, 2024 at 2:30 PM | Confidence Score: 94% | Based on 1,247 data points
+                  across 5 entities
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* AI Assistant */}
+            <Card className="shadow-sm">
+              <CardHeader className="pb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">🤖</div>
+                  <div>
+                    <CardTitle className="text-lg font-semibold">SyncMate AI Assistant</CardTitle>
+                    <CardDescription className="text-sm text-gray-600">
+                      Ask questions about compliance issues and get insights
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Assistant messages */}
+                <div className="space-y-3">
+                  <div className="flex items-end gap-2">
+                    <div className="flex-none w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs leading-none">
+                      🤖
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-lg text-sm">
+                      <p className="text-gray-700 leading-relaxed">
+                        Hello! I'm your SyncMate AI assistant. I can help you analyze compliance issues,
+                        explain resolution workflows, and provide insights about cross-entity data alignment.
+                        What would you like to know?
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-end justify-end gap-2">
+                    <div className="bg-gray-200 p-3 rounded-lg text-sm">
+                      <div className="flex items-start gap-2">
+                        <p className="text-gray-600 text-xs">
+                          What's causing the duplicate records issue with Ayala Land?
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex-none w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-xs leading-none">
+                      👤
+                    </div>
+                  </div>
+
+                  <div className="flex items-end gap-2">
+                    <div className="flex-none w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs leading-none">
+                      🤖
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-lg text-sm">
+                      <div className="flex items-start gap-2">
+                        <p className="text-gray-700 leading-relaxed">
+                          The duplicate records issue (COMP-001) stems from different customer ID formats between BPI's
+                          core banking system and Ayala Land's CRM.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Input area */}
+                <div className="border-t pt-4">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Ask me about compliance issues, resolution strategies, or data insights..."
+                      className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <Button size="sm" className="px-3">
+                      ➤
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-gray-600">Quick Actions:</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
+                      Explain COMP-001
+                    </Button>
+                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
+                      Resolution Timeline
+                    </Button>
+                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
+                      Risk Assessment
+                    </Button>
+                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
+                      Best Practices
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Bottom Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Policy Alignment Simulation */}
+            <Card className="shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg font-semibold">Policy Alignment Simulation</CardTitle>
+                <CardDescription className="text-sm text-gray-600">
+                  AI-powered impact analysis of policy changes
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm">
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-green-800">Scenario: Unified SME Definition</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-xs">
+                      <div>
+                        <p className="text-gray-600">Predicted Outcome:</p>
+                        <p className="font-medium text-green-700">23% reduction in classification conflicts</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Affected Records:</p>
+                        <p className="font-medium text-green-700">~45,000 customer profiles</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Implementation Effort:</p>
+                        <p className="font-medium text-green-700">3-4 weeks</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Compliance Impact:</p>
+                        <p className="font-medium text-green-700">+15% alignment score</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <Button size="sm" className="w-full bg-black text-white">
+                  Run New Simulation
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Collaboration Readiness Score */}
+            <Card className="shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg font-semibold">Collaboration Readiness Score</CardTitle>
+                <CardDescription className="text-sm text-gray-600">
+                  AI-powered impact analysis of policy changes
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">BPI ↔ Ayala Land</span>
+                      <span className="font-bold text-lg">95%</span>
+                    </div>
+                    <Progress value={95} className="h-2" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">BPI ↔ Globe</span>
+                      <span className="font-bold text-lg">78%</span>
+                    </div>
+                    <Progress value={78} className="h-2" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">BPI ↔ AC Energy</span>
+                      <span className="font-bold text-lg">92%</span>
+                    </div>
+                    <Progress value={92} className="h-2" />
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-500 pt-2 border-t">
+                  Scores are based on data alignment, policy compatibility, and historical collaboration success
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+
+
 
           {/* Data Glossary Tab */}
           <TabsContent value="data-glossary" className="space-y-6">
