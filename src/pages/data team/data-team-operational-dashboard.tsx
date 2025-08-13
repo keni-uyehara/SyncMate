@@ -266,125 +266,214 @@ export default function DataTeamOperationalDashboard() {
           {/* Resolution Workflows Tab */}
           <TabsContent value="resolution-workflows" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Active Workflows */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Workflow Status</CardTitle>
-                  <CardDescription>Current resolution workflows and their progress</CardDescription>
+                  <CardTitle>Active Workflows</CardTitle>
+                  <CardDescription>
+                    Current resolution processes in progress
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                        <div>
-                          <p className="font-medium text-sm">Duplicate Detection</p>
-                          <p className="text-xs text-gray-600">COMP-001, COMP-006</p>
-                        </div>
+                  {/* Workflow 1 */}
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                      <div>
+                        <p className="font-medium text-sm">COMP-001: Data Reconciliation</p>
+                        <p className="text-xs text-gray-600">
+                          Step 2 of 4: Field mapping validation
+                        </p>
                       </div>
-                      <Badge className="bg-blue-100 text-blue-800">In Progress</Badge>
                     </div>
-
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                        <div>
-                          <p className="font-medium text-sm">Definition Alignment</p>
-                          <p className="text-xs text-gray-600">COMP-002, COMP-004</p>
-                        </div>
-                      </div>
-                      <Badge className="bg-yellow-100 text-yellow-800">Pending Review</Badge>
-                    </div>
-
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                        <div>
-                          <p className="font-medium text-sm">Threshold Updates</p>
-                          <p className="text-xs text-gray-600">COMP-003, COMP-005</p>
-                        </div>
-                      </div>
-                      <Badge className="bg-green-100 text-green-800">Completed</Badge>
-                    </div>
+                    <Badge className="bg-blue-100 text-blue-800">In Progress</Badge>
                   </div>
+
+                  {/* Workflow 2 */}
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                      <div>
+                        <p className="font-medium text-sm">COMP-002: Policy Alignment</p>
+                        <p className="text-xs text-gray-600">
+                          Step 1 of 3: Stakeholder review
+                        </p>
+                      </div>
+                    </div>
+                    <Badge className="bg-yellow-100 text-yellow-800">Pending Review</Badge>
+                  </div>
+
+                  {/* Workflow 3 */}
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                      <div>
+                        <p className="font-medium text-sm">COMP-003: Threshold Update</p>
+                        <p className="text-xs text-gray-600">
+                          Completed: All steps verified
+                        </p>
+                      </div>
+                    </div>
+                    <Badge className="bg-green-100 text-green-800">Revised</Badge>
+                  </div>
+
+                  {/* Workflow 4 */}
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                      <div>
+                        <p className="font-medium text-sm">COMP-004: Data Reconciliation</p>
+                        <p className="text-xs text-gray-600">
+                          Completed: All steps verified
+                        </p>
+                      </div>
+                    </div>
+                    <Badge className="bg-green-100 text-green-800">Revised</Badge>
+                  </div>
+
                 </CardContent>
               </Card>
 
+              {/* Steward Activity */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Workflow Metrics</CardTitle>
-                  <CardDescription>Performance indicators for resolution workflows</CardDescription>
+                  <CardTitle>Steward Activity</CardTitle>
+                  <CardDescription>
+                    Data steward engagement and activity
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center p-3 border rounded-lg">
-                      <div className="text-2xl font-bold text-blue-600">12</div>
-                      <p className="text-sm text-muted-foreground">Active Workflows</p>
+                  {/* Steward 1 */}
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center font-bold">M</div>
+                      <div>
+                        <p className="font-medium text-sm">Maria Santos</p>
+                        <p className="text-xs text-gray-600">Resolved 3 issues this week</p>
+                      </div>
                     </div>
-                    <div className="text-center p-3 border rounded-lg">
-                      <div className="text-2xl font-bold text-green-600">87%</div>
-                      <p className="text-sm text-muted-foreground">Success Rate</p>
-                    </div>
+                    <Badge className="bg-gray-100 text-gray-800">Active</Badge>
                   </div>
 
-                  <div className="space-y-3">
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Average Time to Resolution</span>
-                        <span className="font-medium">2.3 days</span>
+                  {/* Steward 2 */}
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">J</div>
+                      <div>
+                        <p className="font-medium text-sm">John Cruz</p>
+                        <p className="text-xs text-gray-600">2 pending reviews</p>
                       </div>
-                      <Progress value={75} />
                     </div>
+                    <Badge className="bg-gray-100 text-gray-800">Review</Badge>
+                  </div>
 
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Workflow Efficiency</span>
-                        <span className="font-medium">92%</span>
+                  {/* Steward 3 */}
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center font-bold">A</div>
+                      <div>
+                        <p className="font-medium text-sm">Ana Reyes</p>
+                        <p className="text-xs text-gray-600">Updated 5 definitions</p>
                       </div>
-                      <Progress value={92} />
                     </div>
+                    <Badge className="bg-gray-100 text-gray-800">Updated</Badge>
                   </div>
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
 
+
           {/* Root Cause Analysis Tab */}
           <TabsContent value="root-cause-analysis" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Root Cause Analysis</CardTitle>
-                <CardDescription>Identify and address underlying causes of compliance issues</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 flex items-center justify-center border-2 border-dashed border-gray-200 rounded-lg">
-                  <div className="text-center">
-                    <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-500">Root cause analysis visualization would appear here</p>
-                    <p className="text-sm text-gray-400">Fishbone diagrams, Pareto charts, and trend analysis</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Issue Trends */}
+              <Card className="col-span-1 lg:col-span-1">
+                <CardHeader>
+                  <CardTitle>Issue Trends</CardTitle>
+                  <CardDescription>
+                    Compliance issues patterns over time
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="border-2 border-dashed rounded-lg flex items-center justify-center h-48 text-center text-gray-500">
+                    <div>
+                      <p className="font-medium">📈 Trend visualizations would appear here</p>
+                      <p className="text-xs">Integration with D3.js / Recharts</p>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                </CardContent>
+              </Card>
 
-          {/* Audit Trail Tab */}
-          <TabsContent value="audit-trail" className="space-y-6">
+              {/* Top Issues Categories */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top Issues Categories</CardTitle>
+                  <CardDescription>
+                    Most common compliance issues
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {[
+                    { label: "Duplicate Records", value: 65 },
+                    { label: "Definition Mismatch", value: 45 },
+                    { label: "Outdated Thresholds", value: 30 },
+                    { label: "Policy Conflicts", value: 20 },
+                  ].map((item, index) => (
+                    <div key={index}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span>{item.label}</span>
+                        <span className="font-medium">{item.value}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-3">
+                        <div
+                          className="bg-black h-3 rounded-full"
+                          style={{ width: `${item.value}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Entity Collaboration Health */}
             <Card>
               <CardHeader>
-                <CardTitle>Audit Trail</CardTitle>
-                <CardDescription>Complete history of compliance issue changes and actions</CardDescription>
+                <CardTitle>Entity Collaboration Health</CardTitle>
+                <CardDescription>
+                  Cross-entity data alignment status
+                </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="h-64 flex items-center justify-center border-2 border-dashed border-gray-200 rounded-lg">
-                  <div className="text-center">
-                    <Activity className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-500">Audit trail logs would appear here</p>
-                    <p className="text-sm text-gray-400">Timeline of all changes, approvals, and resolutions</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+              <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[
+                  { entity: "BPI x Ayala Land", value: 92, issues: 3 },
+                  { entity: "BPI x Globe", value: 78, issues: 7 },
+                  { entity: "BPI x AC Energy", value: 95, issues: 1 },
+                ].map((item, index) => (
+                  <div
+                    key={index}
+                    className="p-4 border rounded-lg space-y-2"
+                  >
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium">{item.entity}</span>
+                      <span className="font-medium">{item.value}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div
+                        className="bg-black h-3 rounded-full"
+                        style={{ width: `${item.value}%` }}
+                      ></div>
+          </div>
+          <p className="text-xs text-gray-600">
+            {item.issues} Active {item.issues === 1 ? "issue" : "issues"}
+          </p>
+        </div>
+      ))}
+    </CardContent>
+  </Card>
+</TabsContent>
+
 
           {/* AI Insights Tab */}
           <TabsContent value="ai-insights" className="space-y-6">
