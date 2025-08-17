@@ -1,131 +1,72 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { UserAuthProvider } from "./context/userAuthContext";
-import ProtectedRoute from "./components/ProtectedRoute";      // ⬅️ make sure this path is right
-import RoleRoute from "./components/RoleRoute";                // ⬅️ create from earlier snippet
-import Login from "./pages/Login";
-import TeamLeadPortal from "./components/team-lead-portal";
-import DataTeamPortal from "./components/data-team-portal";
-import PortalSelector from "./components/portal-selector";
-import "./App.css";
-import { useState, useEffect } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { UserAuthProvider } from './context/userAuthContext' // <-- add
+import ProtectedRoute from './components/ProtectedRoute'
+import RoleRoute from './components/RoleRoute'
+import RoleBasedRedirect from './components/RoleBasedRedirect'
+import TeamLeadPortal from './components/team-lead-portal'
+import DataTeamPortal from './components/data-team-portal'
+import TeamLeadPortalNavigation from './components/team-lead-portal-navigation'
+import DataTeamPortalNavigation from './components/data-team-portal-navigation'
+import NotAuthorized from './NotAuthorized'
+import LoginComponent from './pages/Login'
 
-function App() {
-  const [firebaseError, setFirebaseError] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Load once to ensure env is valid (no .js extension for Vite TS)
-    import("./firebaseConfig").catch((error) => {
-      console.error("Firebase configuration error:", error);
-      setFirebaseError(error instanceof Error ? error.message : "Firebase configuration error");
-    });
-  }, []);
-
-  if (firebaseError) {
-    return (
-      <div style={{ padding: 40, maxWidth: 800, margin: "0 auto", fontFamily: "Arial, sans-serif" }}>
-        <h1 style={{ color: "red", marginBottom: 20 }}>Firebase Configuration Error</h1>
-        <p style={{ marginBottom: 20 }}>Your Firebase configuration is missing or invalid. Please follow these steps:</p>
-        <ol style={{ marginBottom: 20, lineHeight: 1.6 }}>
-          <li>Create a <code>.env</code> file in your project root</li>
-          <li>Add your Firebase configuration variables:</li>
-        </ol>
-        <pre style={{ backgroundColor: "#f5f5f5", padding: 15, borderRadius: 5, overflow: "auto" }}>
-{`VITE_APIKEY=your-api-key-here
-VITE_AUTHDOMAIN=your-project-id.firebaseapp.com
-VITE_PROJECTID=your-project-id
-VITE_STORAGEBUCKET=your-project-id.appspot.com
-VITE_MESSAGESENDERID=your-sender-id
-VITE_APPID=your-app-id`}
-        </pre>
-        <p style={{ marginTop: 20 }}>Get these values from Firebase Console → Project Settings → Your apps</p>
-        <details style={{ marginTop: 20 }}>
-          <summary>Error Details</summary>
-          <pre style={{ color: "red", marginTop: 10 }}>{firebaseError}</pre>
-        </details>
-      </div>
-    );
-  }
-
+export default function App() {
   return (
     <UserAuthProvider>
       <Router>
-        <div className="App" style={{ minHeight: "100vh", width: "100vw" }}>
-          <Routes>
-            {/* Public */}
-            <Route path="/login" element={<Login />} />
+        <Routes>
+          <Route path="/login" element={<LoginComponent />} />
+          <Route path="/not-authorized" element={<NotAuthorized />} />
 
-            {/* Protected: anyone logged in */}
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <PortalSelector />
-                </ProtectedRoute>
-              }
-            />
+          <Route path="/" element={
+            <ProtectedRoute>
+              <RoleBasedRedirect />
+            </ProtectedRoute>
+          } />
 
-            {/* Role-protected */}
-            <Route
-              path="/team-lead-portal"
-              element={
-                <ProtectedRoute>
-                  <RoleRoute role="teamLead">
-                    <TeamLeadPortal />
-                  </RoleRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/data-team-portal"
-              element={
-                <ProtectedRoute>
-                  <RoleRoute role="dataTeam">
-                    <DataTeamPortal />
-                  </RoleRoute>
-                </ProtectedRoute>
-              }
-            />
+          <Route path="/team-lead" element={
+            <ProtectedRoute>
+              <RoleRoute role="teamLead">
+                <TeamLeadPortal />
+              </RoleRoute>
+            </ProtectedRoute>
+          } />
 
-            {/* Convenience redirect */}
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/team-lead/compliance" element={
+            <ProtectedRoute>
+              <RoleRoute role="teamLead">
+                <TeamLeadPortalNavigation initialView="compliance" onBack={() => window.history.back()} />
+              </RoleRoute>
+            </ProtectedRoute>
+          } />
 
-            {/* Demo/sample routes (wrap if they should be protected) */}
-            <Route
-              path="/data team/homepage"
-              element={
-                <ProtectedRoute>
-                  <RoleRoute role="dataTeam">
-                    <div style={{ padding: 20 }}>Data Team Homepage</div>
-                  </RoleRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/team lead/homepage"
-              element={
-                <ProtectedRoute>
-                  <RoleRoute role="teamLead">
-                    <div style={{ padding: 20 }}>Team Lead Homepage</div>
-                  </RoleRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/profile"
-              element={
-                <ProtectedRoute>
-                  <div style={{ padding: 20 }}>Profile Page</div>
-                </ProtectedRoute>
-              }
-            />
+          <Route path="/team-lead/insights" element={
+            <ProtectedRoute>
+              <RoleRoute role="teamLead">
+                <TeamLeadPortalNavigation initialView="insights" onBack={() => window.history.back()} />
+              </RoleRoute>
+            </ProtectedRoute>
+          } />
 
-            {/* Not authorized page */}
-            <Route path="/not-authorized" element={<div style={{ padding: 24 }}>🚫 Not Authorized</div>} />
-          </Routes>
-        </div>
+          <Route path="/data-team" element={
+            <ProtectedRoute>
+              <RoleRoute role="dataTeam">
+                <DataTeamPortal />
+              </RoleRoute>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/data-team/operations" element={
+            <ProtectedRoute>
+              <RoleRoute role="dataTeam">
+                <DataTeamPortalNavigation />
+              </RoleRoute>
+            </ProtectedRoute>
+          } />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </Router>
     </UserAuthProvider>
-  );
+  )
 }
-
-export default App;

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -19,8 +19,6 @@ const API_BASE =
 
 const Login: React.FC = () => {
   const nav = useNavigate();
-  const location = useLocation() as any;
-  const redirectTo = location.state?.from?.pathname || "/dashboard";
 
   // form state
   const [email, setEmail] = useState("");
@@ -34,10 +32,10 @@ const Login: React.FC = () => {
   // If already authenticated on the client, skip login
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
-      if (u) nav(redirectTo, { replace: true });
+      if (u) nav("/", { replace: true }); // ✅ go to root for role-based redirect
     });
     return () => unsub();
-  }, [nav, redirectTo]);
+  }, [nav]);
 
   const toHumanMessage = (code: string) => {
     switch (code) {
@@ -81,7 +79,7 @@ const Login: React.FC = () => {
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
       await createSession();
-      nav(redirectTo, { replace: true });
+      nav("/", { replace: true }); // ✅ go to root for role-based redirect
     } catch (error: any) {
       const msg = error?.code ? toHumanMessage(error.code) : error?.message;
       setErr(msg || "Sign-in failed.");
@@ -98,7 +96,7 @@ const Login: React.FC = () => {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       await createSession();
-      nav(redirectTo, { replace: true });
+      nav("/", { replace: true }); // ✅ go to root for role-based redirect
     } catch (error: any) {
       const msg = error?.code ? toHumanMessage(error.code) : error?.message;
       setErr(msg || "Google sign-in failed.");

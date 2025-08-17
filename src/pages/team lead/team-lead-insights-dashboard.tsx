@@ -35,7 +35,9 @@ import {
   Sparkles,
   Bot,
   MessageSquare,
+  LogOut,
 } from "lucide-react"
+import { doLogout } from "@/utils/logout"; // <-- add this import
 
 export default function InsightsDashboard() {
   const synergyOpportunities = [
@@ -141,7 +143,13 @@ export default function InsightsDashboard() {
           {
             label: "Generate Report",
             icon: Lightbulb
-          }
+          },
+          {
+            label: "Logout",
+            icon: LogOut,
+            variant: "outline",
+            onClick: () => doLogout(), // <-- add this action
+          },
         ]}
       />
 

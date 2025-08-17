@@ -26,7 +26,9 @@ import {
   Activity,
   BookOpen,
   Bot,
+  LogOut
 } from "lucide-react"
+import { doLogout } from "@/utils/logout"; // <-- add this import
 
 export default function DataTeamOperationalDashboard() {
 
@@ -110,7 +112,13 @@ export default function DataTeamOperationalDashboard() {
             label: "Flag New Issue",
             icon: AlertTriangle,
             variant: "destructive"
-          }
+          },
+          {
+            label: "Logout",
+            icon: LogOut,
+            variant: "outline",
+            onClick: () => doLogout(), // <-- add this action
+          },
         ]}
       />
 

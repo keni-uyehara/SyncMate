@@ -13,20 +13,65 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
+  LogOut,
 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
+import { signOut } from "firebase/auth"
+import { auth } from "../firebaseConfig" // Adjust path as needed
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000"
 
 export default function PortalSelector() {
   const navigate = useNavigate()
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    setLoggingOut(true)
+    try {
+      // 1. Call backend logout to clear session cookie
+      await fetch(`${API_BASE}/logout`, {
+        method: "POST",
+        credentials: "include",
+      })
+
+      // 2. Sign out from Firebase Auth
+      await signOut(auth)
+      
+      // 3. Redirect to login
+      navigate("/login", { replace: true })
+    } catch (error) {
+      console.error("Logout error:", error)
+      // Still redirect to login even if logout fails
+      navigate("/login", { replace: true })
+    } finally {
+      setLoggingOut(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b">
         <div className="px-6 py-6">
-          <div className="text-center">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">SyncMate Portal Selection</h1>
-            <p className="text-gray-600 text-lg">Choose your portal to access your workspace</p>
+          <div className="flex items-center justify-between">
+            <div className="text-center flex-1">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">SyncMate Portal Selection</h1>
+              <p className="text-gray-600 text-lg">Choose your portal to access your workspace</p>
+            </div>
+            
+            {/* Logout Button */}
+            <div className="flex items-center gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="flex items-center gap-2 text-gray-600 hover:text-red-600 hover:border-red-300"
+              >
+                <LogOut className="w-4 h-4" />
+                {loggingOut ? "Logging out..." : "Logout"}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

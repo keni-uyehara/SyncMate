@@ -1,6 +1,8 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+
 // Fetches from /me to get the role
 export default function RoleRoute({
   role,
@@ -15,7 +17,7 @@ export default function RoleRoute({
   React.useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/me`, {
+        const res = await fetch(`${API_BASE}/me`, {
           credentials: "include",
         });
         if (!res.ok) {
@@ -24,6 +26,8 @@ export default function RoleRoute({
         }
         const me = await res.json();
         setAllowed(me.role === role);
+      } catch (e) {
+        console.error("RoleRoute /me error:", e);
       } finally {
         setReady(true);
       }

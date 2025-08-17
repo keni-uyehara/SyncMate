@@ -25,8 +25,11 @@ import {
   XCircle,
   AlertCircle,
   Lightbulb,
+  LogOut
 } from "lucide-react"
 import { DashboardHeader } from "../../components/ui/dashboard-header"
+import { doLogout } from "@/utils/logout"; // <-- add this import
+
 export default function TeamLeadDashboard() {
   const recentReports = [
     {
@@ -98,7 +101,13 @@ export default function TeamLeadDashboard() {
           {
             label: "Generate Report",
             icon: Lightbulb
-          }
+          },
+          {
+            label: "Logout",
+            icon: LogOut,
+            variant: "outline",
+            onClick: () => doLogout(), // <-- add this action
+          },
         ]}
       />
 
