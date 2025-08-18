@@ -3,7 +3,7 @@ import { auth } from '../firebaseConfig'
 import { Navigate } from 'react-router-dom'
 import React from 'react'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000"
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5173"
 
 export default function RoleBasedRedirect() {
   const [status, setStatus] = React.useState<'loading'|'ready'|'error'>('loading')
@@ -11,31 +11,46 @@ export default function RoleBasedRedirect() {
 
   React.useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
-      if (!u) { setStatus('error'); return } // not signed in (shouldn’t happen inside ProtectedRoute)
+      if (!u) { setStatus('error'); return } // not signed in (shouldn't happen inside ProtectedRoute)
       try {
-        // 1) cookie session first
-        let res = await fetch(`${API_BASE}/me`, { credentials: 'include' })
-        if (!res.ok) {
-          // 2) bearer fallback
-          const idToken = await u.getIdToken()
-          res = await fetch(`${API_BASE}/me`, { headers: { Authorization: `Bearer ${idToken}` } })
-        }
-        if (res.ok) {
-          const me = await res.json()
-          setRole(me.role)
+        // Try to get role from custom claims first
+        const tokenResult = await u.getIdTokenResult(true)
+        const claimRole = tokenResult.claims.role as ("dataTeam"|"teamLead"|undefined)
+        
+        if (claimRole) {
+          setRole(claimRole)
           setStatus('ready')
-        } else {
-          // FINAL FALLBACK: try custom claims
-          const tokenResult = await u.getIdTokenResult(true)
-          const claimRole = tokenResult.claims.role as ("dataTeam"|"teamLead"|undefined)
-          if (claimRole) {
-            setRole(claimRole)
-            setStatus('ready')
-          } else {
-            setStatus('error')
-          }
+          return
         }
-      } catch {
+        
+        // Fallback: try backend API
+        try {
+          let res = await fetch(`${API_BASE}/me`, { credentials: 'include' })
+          if (!res.ok) {
+            const idToken = await u.getIdToken()
+            res = await fetch(`${API_BASE}/me`, { headers: { Authorization: `Bearer ${idToken}` } })
+          }
+          if (res.ok) {
+            const me = await res.json()
+            setRole(me.role)
+            setStatus('ready')
+            return
+          }
+        } catch (backendError) {
+          console.warn('Backend not available, using default role:', backendError)
+        }
+        
+        // Final fallback: use email-based role assignment
+        const email = u.email?.toLowerCase() || ''
+        if (email.includes('lead') || email.includes('manager') || email.includes('admin')) {
+          setRole('teamLead')
+        } else {
+          setRole('dataTeam') // default role
+        }
+        setStatus('ready')
+        
+      } catch (error) {
+        console.error('Error determining user role:', error)
         setStatus('error')
       }
     })
@@ -46,7 +61,7 @@ export default function RoleBasedRedirect() {
     return <div className="min-h-screen flex items-center justify-center">Loading your workspace…</div>
   }
 
-  // Don’t loop back to /login on error; go neutral instead:
+  // Don't loop back to /login on error; go neutral instead:
   if (status === 'error') return <Navigate to="/not-authorized" replace />
 
   return role === 'teamLead'

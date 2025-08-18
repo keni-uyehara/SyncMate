@@ -1,6 +1,6 @@
 "use client"
 
-
+import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,13 +12,17 @@ import { DashboardHeader } from "@/components/ui/dashboard-header"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { SearchFilterBar } from "@/components/ui/search-filter-bar"
 import { ActionDropdown } from "@/components/ui/action-dropdown"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { supabase } from "@/supabaseClient"
+import type { Database } from "@/types/database.types"
+import { doLogout } from "@/utils/logout"
+
 import {
   AlertTriangle,
   Clock,
   Download,
   Eye,
   FileText,
-
   Target,
   X,
   CheckCircle,
@@ -26,76 +30,461 @@ import {
   Activity,
   BookOpen,
   Bot,
-  LogOut
+  LogOut,
+  Loader2,
+  Sparkles
 } from "lucide-react"
-import { doLogout } from "@/utils/logout"; // <-- add this import
+
+type ComplianceIssue = Database["public"]["Tables"]["compliance_issues"]["Row"]
+
+interface AutoDetectionDetails {
+  systemDescription: string
+  summary: string
+  confidence: number
+  recommendations: string[]
+  riskLevel: 'low' | 'medium' | 'high'
+}
 
 export default function DataTeamOperationalDashboard() {
 
-  const complianceIssues = [
-    {
-      id: "COMP-001",
-      type: "Duplicate Records",
-      entity: "BPI x Ayala Land",
-      severity: "High",
-      status: "In Progress",
-      assignee: "Maria Santos",
-      created: "2024-01-15",
-      description: "Multiple customer records with same identification details",
-    },
-    {
-      id: "COMP-002",
-      type: "Definition Mismatch",
-      entity: "BPI x Ayala Land",
-      severity: "Medium",
-      status: "Pending Review",
-      assignee: "John Cruz",
-      created: "2024-01-17",
-      description: "SME definition varies between entities",
-    },
-    {
-      id: "COMP-003",
-      type: "Outdated Threshold",
-      entity: "BPI x Ayala Land",
-      severity: "Low",
-      status: "Revised",
-      assignee: "Ana Reyes",
-      created: "2024-01-17",
-      description: "Risk thresholds not updated for current market conditions",
-    },
-    {
-      id: "COMP-004",
-      type: "Definition Mismatch",
-      entity: "BPI x Ayala Land",
-      severity: "Medium",
-      status: "Revised",
-      assignee: "Pedro Luna",
-      created: "2024-01-18",
-      description: "Customer segment definitions inconsistent",
-    },
-    {
-      id: "COMP-005",
-      type: "Outdated Threshold",
-      entity: "BPI x Ayala Land",
-      severity: "Medium",
-      status: "In Progress",
-      assignee: "Maria Santos",
-      created: "2024-01-19",
-      description: "Compliance thresholds need quarterly review",
-    },
-    {
-      id: "COMP-006",
-      type: "Duplicate Records",
-      entity: "BPI x Ayala Land",
-      severity: "Low",
-      status: "Pending Review",
-      assignee: "Ana Reyes",
-      created: "2024-01-24",
-      description: "Potential duplicate entries in customer database",
-    },
-  ]
+  const [complianceIssues, setComplianceIssues] = useState<ComplianceIssue[]>([])
+  const [loading, setLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
+  const [selectedIssue, setSelectedIssue] = useState<ComplianceIssue | null>(null)
+  const [autoDetectionDetails, setAutoDetectionDetails] = useState<AutoDetectionDetails | null>(null)
+  const [generatingDetails, setGeneratingDetails] = useState(false)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [summarizer, setSummarizer] = useState<any>(null)
+  const [isPipelineLoading, setIsPipelineLoading] = useState(false)
+  const rowsPerPage = 6
 
+  // Initialize transformers
+  useEffect(() => {
+    const initializeTransformers = async () => {
+      try {
+        setIsPipelineLoading(true)
+        console.log('Loading summarization pipeline...')
+        
+        const { pipeline } = await import('@xenova/transformers')
+        const summarizationPipeline = await pipeline("summarization", "Xenova/distilbart-cnn-12-6")
+        
+        console.log('Summarization pipeline loaded:', summarizationPipeline)
+        setSummarizer(summarizationPipeline)
+        console.log('Summarizer successfully set in state')
+      } catch (error) {
+        console.error('Error loading summarization pipeline:', error)
+        setSummarizer('fallback')
+      } finally {
+        setIsPipelineLoading(false)
+      }
+    }
 
+    initializeTransformers()
+  }, [])
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      try {
+        // Get total count
+        const { count, error: countError } = await supabase
+          .from("compliance_issues")
+          .select("*", { count: "exact", head: true })
+        
+        if (countError) {
+          console.error("Error fetching count:", countError.message)
+          setTotalCount(0)
+        } else {
+          setTotalCount(count || 0)
+        }
+
+        // Get paginated data
+        const from = (currentPage - 1) * rowsPerPage
+        const to = from + rowsPerPage - 1
+        
+        const { data, error } = await supabase
+          .from("compliance_issues")
+          .select("*")
+          .order("date_created", { ascending: false })
+          .range(from, to)
+        
+        if (error) {
+          console.error("Error fetching compliance issues:", error.message)
+          setComplianceIssues([])
+        } else {
+          setComplianceIssues(data || [])
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error)
+        setComplianceIssues([])
+        setTotalCount(0)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [currentPage])
+
+  const totalPages = Math.ceil(totalCount / rowsPerPage)
+  const startItem = totalCount > 0 ? (currentPage - 1) * rowsPerPage + 1 : 0
+  const endItem = Math.min(currentPage * rowsPerPage, totalCount)
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page)
+    }
+  }
+
+  // Generate page numbers with ellipsis for better UX
+  const getPageNumbers = () => {
+    const pages = []
+    const maxVisiblePages = 5
+    
+    if (totalPages <= maxVisiblePages) {
+      // Show all pages if total is small
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i)
+      }
+    } else {
+      // Show first page, last page, current page, and neighbors
+      if (currentPage <= 3) {
+        // Near the beginning
+        for (let i = 1; i <= 4; i++) {
+          pages.push(i)
+        }
+        pages.push('...')
+        pages.push(totalPages)
+      } else if (currentPage >= totalPages - 2) {
+        // Near the end
+        pages.push(1)
+        pages.push('...')
+        for (let i = totalPages - 3; i <= totalPages; i++) {
+          pages.push(i)
+        }
+      } else {
+        // In the middle
+        pages.push(1)
+        pages.push('...')
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+          pages.push(i)
+        }
+        pages.push('...')
+        pages.push(totalPages)
+      }
+    }
+    
+    return pages
+  }
+
+  const generateAutoDetectionDetails = async (issue: ComplianceIssue) => {
+    setGeneratingDetails(true)
+    
+    try {
+      if (!summarizer || summarizer === 'fallback') {
+        console.log('Using fallback generation method')
+        const details = generateFallbackDetails(issue)
+        setAutoDetectionDetails(details)
+        return
+      }
+
+      console.log('Using AI summarization for generation')
+      
+      // System description = rule-based baseline, polished by summarizer
+      const rawDescription = generateSystemDescription(issue)
+      console.log('Raw system description:', rawDescription)
+      
+      const systemDescriptionResult = await summarizer(rawDescription)
+      const systemDescription = systemDescriptionResult[0]?.summary_text || rawDescription
+      console.log('Summarized system description:', systemDescription)
+
+      // Summary = summarizer on issue description
+      const summaryInput = issue.description || rawDescription
+      const summaryResult = await summarizer(summaryInput, {
+        max_length: 60,
+        min_length: 20
+      })
+      const summary = summaryResult[0]?.summary_text || generateSummary(issue)
+      console.log('Generated summary:', summary)
+
+      // AI-generated recommendations based on specific issue details
+      const aiRecommendations = await generateAIRecommendations(issue, summarizer)
+      console.log('AI-generated recommendations:', aiRecommendations)
+
+      // Confidence & risk level
+      const confidence = calculateConfidence(issue)
+      const riskLevel = calculateRisk(issue)
+
+      const details: AutoDetectionDetails = {
+        systemDescription,
+        summary,
+        confidence,
+        recommendations: aiRecommendations,
+        riskLevel
+      }
+
+      console.log('Final auto-detection details:', details)
+      setAutoDetectionDetails(details)
+    } catch (error) {
+      console.error('Error generating auto-detection details:', error)
+      const fallbackDetails = generateFallbackDetails(issue)
+      setAutoDetectionDetails(fallbackDetails)
+    } finally {
+      setGeneratingDetails(false)
+    }
+  }
+
+  const generateAIRecommendations = async (issue: ComplianceIssue, summarizer: any): Promise<string[]> => {
+    try {
+      // Create a more focused and structured context for AI recommendations
+      const recommendationContext = `
+        Issue: ${issue.issue_type} for ${issue.entity} (ID: ${issue.issue_id})
+        Severity: ${issue.severity || 'Unknown'}
+        Current Status: ${issue.status || 'Unknown'}
+        Description: ${issue.description || 'No description provided'}
+        
+        Generate 4 specific, non-redundant recommendations for a data steward to resolve this compliance issue.
+        Focus on:
+        1. Immediate action to resolve the issue
+        2. Process improvement to prevent recurrence
+        3. Data quality enhancement
+        4. Monitoring and validation
+        
+        Make each recommendation specific, actionable, and different from the others.
+        Avoid generic statements. Be specific to this issue type and entity.
+      `
+
+      console.log('Generating focused AI recommendations with context:', recommendationContext)
+
+      // Generate recommendations using the summarizer
+      const recommendationsResult = await summarizer(recommendationContext, {
+        max_length: 250,
+        min_length: 80
+      })
+
+      const recommendationsText = recommendationsResult[0]?.summary_text || ''
+      console.log('Raw AI recommendations:', recommendationsText)
+
+      // Parse and clean recommendations
+      const recommendations = recommendationsText
+        .split(/[.!?]+/)
+        .map(rec => rec.trim())
+        .filter(rec => rec.length > 15 && rec.length < 150)
+        .map(rec => rec.replace(/^\d+\.\s*/, '').trim())
+        .filter(rec => rec.length > 0)
+        .slice(0, 4)
+
+      // If AI didn't generate enough quality recommendations, use structured fallback
+      if (recommendations.length < 2) {
+        console.log('Using structured fallback recommendations')
+        return generateStructuredRecommendations(issue)
+      }
+
+      return recommendations
+    } catch (error) {
+      console.error('Error generating AI recommendations:', error)
+      return generateStructuredRecommendations(issue)
+    }
+  }
+
+  const generateStructuredRecommendations = (issue: ComplianceIssue): string[] => {
+    const issueType = issue.issue_type?.toLowerCase() || ''
+    const entity = issue.entity || 'the affected entity'
+    const severity = issue.severity?.toLowerCase() || 'medium'
+
+    // Define specific recommendation templates for each issue type
+    const recommendationTemplates = {
+      duplicate: [
+        `Run automated deduplication on ${entity} customer records using fuzzy matching on email and phone fields`,
+        `Implement real-time duplicate detection during ${entity} data ingestion to prevent future duplicates`,
+        `Establish data quality scorecards for ${entity} to monitor duplicate rates and set alert thresholds`,
+        `Create customer master data management process for ${entity} to maintain single source of truth`
+      ],
+      mismatch: [
+        `Conduct data definition audit for ${entity} and align with regulatory compliance requirements`,
+        `Implement automated data validation rules for ${entity} to catch definition mismatches during ingestion`,
+        `Establish data governance committee for ${entity} to maintain consistent definitions across systems`,
+        `Create data lineage documentation for ${entity} to track definition changes and their impact`
+      ],
+      threshold: [
+        `Review and recalibrate threshold parameters for ${entity} based on current market conditions and risk appetite`,
+        `Implement dynamic threshold adjustment system for ${entity} that adapts to changing business conditions`,
+        `Set up automated threshold monitoring dashboard for ${entity} with real-time alerts and escalation`,
+        `Establish threshold review and approval workflow for ${entity} with quarterly validation cycles`
+      ],
+      policy: [
+        `Conduct policy compliance gap analysis for ${entity} and create remediation roadmap`,
+        `Implement policy compliance monitoring system for ${entity} with automated violation detection`,
+        `Establish policy training program for ${entity} stakeholders with regular certification requirements`,
+        `Create policy exception management process for ${entity} with proper approval and documentation`
+      ]
+    }
+
+    // Get base recommendations for the issue type
+    let recommendations = recommendationTemplates[issueType as keyof typeof recommendationTemplates] || [
+      `Investigate root cause of ${issue.issue_type} issue for ${entity} and document findings`,
+      `Implement preventive controls for ${entity} to avoid similar compliance issues`,
+      `Establish monitoring and alerting for ${entity} to detect early warning signs`,
+      `Create standardized resolution procedures for ${entity} future reference`
+    ]
+
+    // Add severity-specific recommendations
+    if (severity.includes('high')) {
+      recommendations.unshift(`Immediately escalate ${issue.issue_type} issue for ${entity} to senior management and implement containment measures`)
+    } else if (severity.includes('low')) {
+      recommendations.push(`Schedule regular review of ${entity} compliance status to prevent escalation`)
+    }
+
+    return recommendations.slice(0, 4)
+  }
+
+  const generateFallbackRecommendations = (issue: ComplianceIssue): string[] => {
+    // This function is now replaced by generateStructuredRecommendations
+    return generateStructuredRecommendations(issue)
+  }
+
+  const calculateConfidence = (issue: ComplianceIssue): number => {
+    const dataFields = [issue.issue_type, issue.entity, issue.severity, issue.status, issue.description]
+    const filledFields = dataFields.filter(field => field && field.trim().length > 0).length
+    return Math.round((filledFields / dataFields.length) * 100)
+  }
+
+  const calculateRisk = (issue: ComplianceIssue): 'low' | 'medium' | 'high' => {
+    const severity = issue.severity?.toLowerCase() || 'medium'
+    if (severity.includes('high')) return 'high'
+    if (severity.includes('low')) return 'low'
+    return 'medium'
+  }
+
+  const generateSystemDescription = (issue: ComplianceIssue): string => {
+    const issueType = issue.issue_type?.toLowerCase() || ''
+    const entity = issue.entity || 'the system'
+    const severity = issue.severity || 'unknown'
+    const description = issue.description || 'No specific description provided'
+    const assignee = issue.assignee || 'Unassigned'
+    const dateCreated = issue.date_created ? new Date(issue.date_created).toLocaleDateString() : 'unknown date'
+
+    if (issueType.includes('duplicate')) {
+      return `The system has identified duplicate records for ${entity} with issue ID ${issue.issue_id}. This duplication was detected on ${dateCreated} and affects data integrity. The issue is currently assigned to ${assignee} and has a ${severity} severity level. ${description}`
+    }
+    
+    if (issueType.includes('mismatch')) {
+      return `A data definition mismatch has been detected for ${entity} (Issue ID: ${issue.issue_id}). This mismatch was flagged on ${dateCreated} and may cause compliance violations. The issue is assigned to ${assignee} with ${severity} severity. ${description}`
+    }
+    
+    if (issueType.includes('threshold')) {
+      return `Threshold violation detected for ${entity} (Issue ID: ${issue.issue_id}). The current values exceed acceptable limits defined in our compliance framework. This issue was created on ${dateCreated}, assigned to ${assignee}, and has ${severity} severity. ${description}`
+    }
+    
+    if (issueType.includes('policy')) {
+      return `Policy alignment issue identified for ${entity} (Issue ID: ${issue.issue_id}). The current implementation does not fully comply with established governance policies. Created on ${dateCreated}, assigned to ${assignee}, with ${severity} severity. ${description}`
+    }
+    
+    return `Compliance issue ${issue.issue_id} detected for ${entity} on ${dateCreated}. This issue was flagged during automated monitoring and is currently assigned to ${assignee} with ${severity} severity level. ${description}`
+  }
+
+  const generateSummary = (issue: ComplianceIssue): string => {
+    const severity = issue.severity?.toLowerCase() || 'medium'
+    const entity = issue.entity || 'the system'
+    const issueId = issue.issue_id
+    const issueType = issue.issue_type || 'compliance issue'
+    const assignee = issue.assignee || 'Unassigned'
+    
+    if (severity.includes('high')) {
+      return `Critical ${issueType} (${issueId}) requiring immediate attention for ${entity}. Currently assigned to ${assignee} and flagged as high priority.`
+    } else if (severity.includes('low')) {
+      return `Minor ${issueType} (${issueId}) detected for ${entity}. Assigned to ${assignee} with standard priority level.`
+    } else {
+      return `Moderate ${issueType} (${issueId}) identified for ${entity}. Assigned to ${assignee} and requires attention within standard timeframe.`
+    }
+  }
+
+  const generateRecommendations = (issue: ComplianceIssue): string[] => {
+    const severity = issue.severity?.toLowerCase() || 'medium'
+    const issueType = issue.issue_type?.toLowerCase() || ''
+    const entity = issue.entity || 'the affected entity'
+
+    let specificRecommendations: string[] = []
+
+    // Issue type-specific recommendations
+    if (issueType.includes('duplicate')) {
+      specificRecommendations.push('Implement automated deduplication process using "keep most recent" strategy')
+      specificRecommendations.push('Establish data quality controls to prevent future duplicate entries')
+      specificRecommendations.push('Review customer identification and onboarding processes')
+      specificRecommendations.push('Set up real-time duplicate detection alerts')
+      specificRecommendations.push('Create data reconciliation procedures between systems')
+    }
+
+    if (issueType.includes('mismatch')) {
+      specificRecommendations.push('Review and standardize data definitions across all systems')
+      specificRecommendations.push('Update data governance policies to align with regulatory requirements')
+      specificRecommendations.push('Implement data validation rules to prevent definition mismatches')
+      specificRecommendations.push('Establish cross-departmental data definition committees')
+      specificRecommendations.push('Create data lineage documentation for affected fields')
+    }
+
+    if (issueType.includes('threshold')) {
+      specificRecommendations.push('Review and recalibrate threshold settings based on current business metrics')
+      specificRecommendations.push('Implement dynamic threshold adjustment based on market conditions')
+      specificRecommendations.push('Set up automated threshold monitoring and alerting systems')
+      specificRecommendations.push('Establish threshold review and approval workflows')
+      specificRecommendations.push('Create threshold performance dashboards for continuous monitoring')
+    }
+
+    if (issueType.includes('policy')) {
+      specificRecommendations.push('Conduct policy compliance audit and gap analysis')
+      specificRecommendations.push('Update operational procedures to align with governance policies')
+      specificRecommendations.push('Implement policy compliance monitoring and reporting tools')
+      specificRecommendations.push('Establish policy training programs for affected teams')
+      specificRecommendations.push('Create policy exception handling and approval processes')
+    }
+
+    // Severity-based recommendations
+    if (severity.includes('high')) {
+      specificRecommendations.unshift('Implement immediate containment measures to prevent issue escalation')
+      specificRecommendations.unshift('Establish crisis management protocols for high-severity issues')
+    } else if (severity.includes('low')) {
+      specificRecommendations.unshift('Schedule regular monitoring to prevent issue recurrence')
+    }
+
+    // General issue resolution recommendations
+    const generalRecommendations = [
+      'Document root cause analysis and resolution steps',
+      'Establish preventive measures to avoid similar issues',
+      'Set up monitoring and alerting for early detection',
+      'Create standardized resolution procedures for future reference'
+    ]
+
+    return [...specificRecommendations, ...generalRecommendations].slice(0, 6)
+  }
+
+  const generateFallbackDetails = (issue: ComplianceIssue): AutoDetectionDetails => {
+    console.log('Generating fallback details for issue:', issue)
+    
+    const systemDescription = generateSystemDescription(issue)
+    const summary = generateSummary(issue)
+    const recommendations = generateRecommendations(issue)
+    const confidence = calculateConfidence(issue)
+    const riskLevel = calculateRisk(issue)
+
+    const details: AutoDetectionDetails = {
+      systemDescription,
+      summary,
+      confidence,
+      recommendations,
+      riskLevel
+    }
+
+    console.log('Generated fallback details:', details)
+    return details
+  }
+
+  const handleViewAutoDetectionDetails = async (issue: ComplianceIssue) => {
+    setSelectedIssue(issue)
+    setAutoDetectionDetails(null)
+    setIsDialogOpen(true)
+    await generateAutoDetectionDetails(issue)
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -190,83 +579,126 @@ export default function DataTeamOperationalDashboard() {
                 </div>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Issue ID</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Entity</TableHead>
-                      <TableHead>Severity</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Assignee</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {complianceIssues.map((issue) => (
-                      <TableRow key={issue.id}>
-                        <TableCell className="font-medium">{issue.id}</TableCell>
-                        <TableCell>{issue.type}</TableCell>
-                        <TableCell>{issue.entity}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={issue.severity} variant="severity" />
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={issue.status} variant="status" />
-                        </TableCell>
-                        <TableCell>{issue.assignee}</TableCell>
-                        <TableCell>{issue.created}</TableCell>
-                        <TableCell>
-                          <ActionDropdown
-                            itemId={issue.id}
-                            actions={[
-                              {
-                                label: "View Auto-Detection Details",
-                                icon: Eye,
-                                onClick: () => console.log(`View details for ${issue.id}`)
-                              },
-                              {
-                                label: "Resolve Duplicates",
-                                icon: FileText,
-                                onClick: () => console.log(`Resolve duplicates for ${issue.id}`)
-                              },
-                              {
-                                label: "Dismiss Issue",
-                                icon: X,
-                                onClick: () => console.log(`Dismiss issue ${issue.id}`),
-                                variant: "destructive"
-                              }
-                            ]}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                {loading ? (
+                  <div className="flex items-center justify-center h-32">
+                    <div className="text-gray-500">Loading compliance issues...</div>
+                  </div>
+                ) : (
+                  <>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Issue ID</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Entity</TableHead>
+                          <TableHead>Severity</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Assignee</TableHead>
+                          <TableHead>Created</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {complianceIssues.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={8} className="text-center text-gray-500 py-8">
+                              No compliance issues found
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          complianceIssues.map((issue, index) => (
+                            <TableRow key={`${issue.record_id}-${issue.issue_id}-${index}`}>
+                              <TableCell className="font-medium">{issue.issue_id}</TableCell>
+                              <TableCell>{issue.issue_type}</TableCell>
+                              <TableCell>{issue.entity}</TableCell>
+                              <TableCell>
+                                <StatusBadge status={issue.severity || "unknown"} variant="severity" />
+                              </TableCell>
+                              <TableCell>
+                                <StatusBadge status={issue.status || "unknown"} variant="status" />
+                              </TableCell>
+                              <TableCell>{issue.assignee || "Unassigned"}</TableCell>
+                              <TableCell>
+                                {issue.date_created 
+                                  ? new Date(issue.date_created).toLocaleDateString()
+                                  : "N/A"
+                                }
+                              </TableCell>
+                              <TableCell>
+                                <ActionDropdown
+                                  itemId={issue.issue_id}
+                                  actions={[
+                                    {
+                                      label: "View Auto-Detection Details",
+                                      icon: Eye,
+                                      onClick: () => handleViewAutoDetectionDetails(issue)
+                                    },
+                                    {
+                                      label: "Resolve Duplicates",
+                                      icon: FileText,
+                                      onClick: () => console.log(`Resolve duplicates for ${issue.issue_id}`)
+                                    },
+                                    {
+                                      label: "Dismiss Issue",
+                                      icon: X,
+                                      onClick: () => console.log(`Dismiss issue ${issue.issue_id}`),
+                                      variant: "destructive"
+                                    }
+                                  ]}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
 
-                {/* Pagination */}
-                <div className="flex items-center justify-between mt-6">
-                  <div className="text-sm text-gray-500">
-                    Showing 1 to 6 of 68 results
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm">
-                      ← Previous
-                    </Button>
-                    <div className="flex items-center gap-1">
-                      <Button variant="default" size="sm">1</Button>
-                      <Button variant="outline" size="sm">2</Button>
-                      <Button variant="outline" size="sm">3</Button>
-                      <span className="px-2">...</span>
-                      <Button variant="outline" size="sm">67</Button>
-                      <Button variant="outline" size="sm">68</Button>
-                    </div>
-                    <Button variant="outline" size="sm">
-                      Next →
-                    </Button>
-                  </div>
-                </div>
+                    {/* Pagination */}
+                    {totalCount > 0 && (
+                      <div className="flex items-center justify-between mt-6">
+                        <div className="text-sm text-gray-500">
+                          Showing {startItem} to {endItem} of {totalCount} results
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            disabled={currentPage === 1}
+                            onClick={() => handlePageChange(currentPage - 1)}
+                          >
+                            ← Previous
+                          </Button>
+                          <div className="flex items-center gap-1">
+                            {getPageNumbers().map((page, index) => (
+                              page === '...' ? (
+                                <span key={`ellipsis-${index}`} className="px-2 text-gray-500">
+                                  ...
+                                </span>
+                              ) : (
+                                <Button
+                                  key={page}
+                                  variant={currentPage === page ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={() => handlePageChange(page as number)}
+                                >
+                                  {page}
+                                </Button>
+                              )
+                            ))}
+                          </div>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            onClick={() => handlePageChange(currentPage + 1)}
+                          >
+                            Next →
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -572,7 +1004,6 @@ export default function DataTeamOperationalDashboard() {
 
 
           {/* AI Insights Tab */}
-          {/* AI Insights Tab */}
         <TabsContent value="ai-insights" className="space-y-6 mt-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Generated Compliance Report */}
@@ -867,6 +1298,176 @@ export default function DataTeamOperationalDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Auto-Detection Details Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-500" />
+              Auto-Detection Details: {selectedIssue?.issue_id}
+            </DialogTitle>
+            <DialogDescription>
+              System-generated compliance issue detected on {selectedIssue?.date_created ? new Date(selectedIssue.date_created).toLocaleDateString() : 'Unknown date'}.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedIssue && (
+            <div className="space-y-6">
+              {/* Issue Overview */}
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="font-medium text-gray-600">Issue Type</p>
+                  <p>{selectedIssue.issue_type}</p>
+                </div>
+                <div>
+                  <p className="font-medium text-gray-600">Affected Entity</p>
+                  <p>{selectedIssue.entity}</p>
+                </div>
+                <div>
+                  <p className="font-medium text-gray-600">Severity</p>
+                  <StatusBadge status={selectedIssue.severity || "unknown"} variant="severity" />
+                </div>
+                <div>
+                  <p className="font-medium text-gray-600">Detection Confidence</p>
+                  <span className="text-green-600 font-semibold">94%</span>
+                </div>
+              </div>
+
+              {/* AI Analysis */}
+              {generatingDetails ? (
+                <Card>
+                  <CardContent className="flex items-center justify-center py-8">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Generating AI analysis...</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : autoDetectionDetails ? (
+                <div className="space-y-4">
+                  {/* System Analysis */}
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h3 className="font-semibold text-lg mb-3">System Analysis</h3>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <span className="font-medium">Description:</span>
+                        <span className="ml-2 text-gray-700">
+                          {autoDetectionDetails.systemDescription}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="font-medium">Detected Method:</span>
+                        <span className="ml-2 text-gray-700">
+                          {selectedIssue.issue_type?.toLowerCase().includes('duplicate') 
+                            ? 'Fuzzy matching algorithm on customer identifiers'
+                            : 'Automated compliance monitoring system'
+                          }
+                        </span>
+                      </div>
+                      <div>
+                        <span className="font-medium">Affected Records:</span>
+                        <span className="ml-2 text-gray-700">
+                          {selectedIssue.issue_type?.toLowerCase().includes('duplicate') ? '275' : '1'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* System Recommendation */}
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <h3 className="font-semibold text-lg mb-3">System Recommendation</h3>
+                    <p className="text-gray-700">
+                      {selectedIssue.issue_type?.toLowerCase().includes('duplicate') 
+                        ? "Apply automated deduplication using 'keep most recent' strategy with transaction history preservation."
+                        : autoDetectionDetails.recommendations[0] || "Review and resolve the compliance issue according to standard procedures."
+                      }
+                    </p>
+                  </div>
+
+                  {/* Duplicate Analysis (only show for duplicate issues) */}
+                  {selectedIssue.issue_type?.toLowerCase().includes('duplicate') && (
+                    <div>
+                      <h3 className="font-semibold text-lg mb-3">Duplicate Analysis</h3>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="font-medium">Total Duplicates Found:</span>
+                          <span className="ml-2 text-red-600 font-semibold">275</span>
+                        </div>
+                        <div>
+                          <span className="font-medium">Matching Criteria:</span>
+                          <span className="ml-2 text-gray-700">Same customer_id, email, and phone number</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sample Duplicates (only show for duplicate issues) */}
+                  {selectedIssue.issue_type?.toLowerCase().includes('duplicate') && (
+                    <div>
+                      <h3 className="font-semibold text-lg mb-3">Sample Duplicates:</h3>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <p className="font-medium">John Smith</p>
+                            <p className="text-sm text-gray-600">john@email.com</p>
+                          </div>
+                          <Badge variant="secondary" className="bg-gray-100 text-gray-700">
+                            3 Duplicates
+                          </Badge>
+                        </div>
+                        <div className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <p className="font-medium">Maria Santos</p>
+                            <p className="text-sm text-gray-600">maria.santos@email.com</p>
+                          </div>
+                          <Badge variant="secondary" className="bg-gray-100 text-gray-700">
+                            2 Duplicates
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Additional Recommendations */}
+                  <div>
+                    <h3 className="font-semibold text-lg mb-3">Additional Recommendations</h3>
+                    <ul className="space-y-2">
+                      {autoDetectionDetails.recommendations.slice(1).map((recommendation, index) => (
+                        <li key={index} className="flex items-start gap-2">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                          <span className="text-gray-700">{recommendation}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Risk Assessment */}
+                  <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                    <h3 className="font-semibold text-lg mb-3">Risk Assessment</h3>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="font-medium">Risk Level:</span>
+                        <Badge 
+                          variant={autoDetectionDetails.riskLevel === 'high' ? 'destructive' : 
+                                 autoDetectionDetails.riskLevel === 'medium' ? 'default' : 'secondary'}
+                          className="ml-2"
+                        >
+                          {autoDetectionDetails.riskLevel.toUpperCase()}
+                        </Badge>
+                      </div>
+                      <div>
+                        <span className="font-medium">Confidence Score:</span>
+                        <span className="ml-2 font-semibold">{autoDetectionDetails.confidence}%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

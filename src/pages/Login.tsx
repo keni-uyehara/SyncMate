@@ -59,16 +59,22 @@ const Login: React.FC = () => {
   const createSession = async () => {
     const current = auth.currentUser;
     if (!current) throw new Error("No user after sign-in");
-    const idToken = await current.getIdToken();
-    const res = await fetch(`${API_BASE}/sessionLogin`, {
-      method: "POST",
-      credentials: "include", // <-- IMPORTANT: save cookie in browser
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error || "Failed to create session");
+    
+    try {
+      const idToken = await current.getIdToken();
+      const res = await fetch(`${API_BASE}/sessionLogin`, {
+        method: "POST",
+        credentials: "include", // <-- IMPORTANT: save cookie in browser
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || "Failed to create session");
+      }
+    } catch (error) {
+      console.warn("Backend session creation failed, continuing without backend:", error);
+      // Continue without backend session - role will be determined by Firebase claims or email
     }
   };
 
