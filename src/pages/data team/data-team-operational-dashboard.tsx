@@ -1,6 +1,6 @@
 "use client"
 
-
+import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,13 +12,15 @@ import { DashboardHeader } from "@/components/ui/dashboard-header"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { SearchFilterBar } from "@/components/ui/search-filter-bar"
 import { ActionDropdown } from "@/components/ui/action-dropdown"
+import { supabase } from "@/supabaseClient"
+import type { Database } from "@/types/database.types"
+
 import {
   AlertTriangle,
   Clock,
   Download,
   Eye,
   FileText,
-
   Target,
   X,
   CheckCircle,
@@ -30,72 +32,35 @@ import {
 } from "lucide-react"
 import { doLogout } from "@/utils/logout"; // <-- add this import
 
+type ComplianceIssue = Database["public"]["Tables"]["compliance_issues"]["Row"]
+
 export default function DataTeamOperationalDashboard() {
 
-  const complianceIssues = [
-    {
-      id: "COMP-001",
-      type: "Duplicate Records",
-      entity: "BPI x Ayala Land",
-      severity: "High",
-      status: "In Progress",
-      assignee: "Maria Santos",
-      created: "2024-01-15",
-      description: "Multiple customer records with same identification details",
-    },
-    {
-      id: "COMP-002",
-      type: "Definition Mismatch",
-      entity: "BPI x Ayala Land",
-      severity: "Medium",
-      status: "Pending Review",
-      assignee: "John Cruz",
-      created: "2024-01-17",
-      description: "SME definition varies between entities",
-    },
-    {
-      id: "COMP-003",
-      type: "Outdated Threshold",
-      entity: "BPI x Ayala Land",
-      severity: "Low",
-      status: "Revised",
-      assignee: "Ana Reyes",
-      created: "2024-01-17",
-      description: "Risk thresholds not updated for current market conditions",
-    },
-    {
-      id: "COMP-004",
-      type: "Definition Mismatch",
-      entity: "BPI x Ayala Land",
-      severity: "Medium",
-      status: "Revised",
-      assignee: "Pedro Luna",
-      created: "2024-01-18",
-      description: "Customer segment definitions inconsistent",
-    },
-    {
-      id: "COMP-005",
-      type: "Outdated Threshold",
-      entity: "BPI x Ayala Land",
-      severity: "Medium",
-      status: "In Progress",
-      assignee: "Maria Santos",
-      created: "2024-01-19",
-      description: "Compliance thresholds need quarterly review",
-    },
-    {
-      id: "COMP-006",
-      type: "Duplicate Records",
-      entity: "BPI x Ayala Land",
-      severity: "Low",
-      status: "Pending Review",
-      assignee: "Ana Reyes",
-      created: "2024-01-24",
-      description: "Potential duplicate entries in customer database",
-    },
-  ]
+  const [complianceIssues, setComplianceIssues] = useState<ComplianceIssue[]>([])
+  const [loading, setLoading] = useState(true)
 
-
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      try {
+        const { data, error } = await supabase
+          .from("compliance_issues")
+          .select("*")
+          .order("date_created", { ascending: false })
+        
+        if (error) {
+          console.error("Error fetching compliance issues:", error.message)
+        } else {
+          setComplianceIssues(data || [])
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -190,83 +155,101 @@ export default function DataTeamOperationalDashboard() {
                 </div>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Issue ID</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Entity</TableHead>
-                      <TableHead>Severity</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Assignee</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {complianceIssues.map((issue) => (
-                      <TableRow key={issue.id}>
-                        <TableCell className="font-medium">{issue.id}</TableCell>
-                        <TableCell>{issue.type}</TableCell>
-                        <TableCell>{issue.entity}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={issue.severity} variant="severity" />
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={issue.status} variant="status" />
-                        </TableCell>
-                        <TableCell>{issue.assignee}</TableCell>
-                        <TableCell>{issue.created}</TableCell>
-                        <TableCell>
-                          <ActionDropdown
-                            itemId={issue.id}
-                            actions={[
-                              {
-                                label: "View Auto-Detection Details",
-                                icon: Eye,
-                                onClick: () => console.log(`View details for ${issue.id}`)
-                              },
-                              {
-                                label: "Resolve Duplicates",
-                                icon: FileText,
-                                onClick: () => console.log(`Resolve duplicates for ${issue.id}`)
-                              },
-                              {
-                                label: "Dismiss Issue",
-                                icon: X,
-                                onClick: () => console.log(`Dismiss issue ${issue.id}`),
-                                variant: "destructive"
-                              }
-                            ]}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                {loading ? (
+                  <div className="flex items-center justify-center h-32">
+                    <div className="text-gray-500">Loading compliance issues...</div>
+                  </div>
+                ) : (
+                  <>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Issue ID</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Entity</TableHead>
+                          <TableHead>Severity</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Assignee</TableHead>
+                          <TableHead>Created</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {complianceIssues.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={8} className="text-center text-gray-500 py-8">
+                              No compliance issues found
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          complianceIssues.map((issue) => (
+                            <TableRow key={issue.record_id}>
+                              <TableCell className="font-medium">{issue.issue_id}</TableCell>
+                              <TableCell>{issue.issue_type}</TableCell>
+                              <TableCell>{issue.entity}</TableCell>
+                              <TableCell>
+                                <StatusBadge status={issue.severity || "unknown"} variant="severity" />
+                              </TableCell>
+                              <TableCell>
+                                <StatusBadge status={issue.status || "unknown"} variant="status" />
+                              </TableCell>
+                              <TableCell>{issue.assignee || "Unassigned"}</TableCell>
+                              <TableCell>
+                                {issue.date_created 
+                                  ? new Date(issue.date_created).toLocaleDateString()
+                                  : "N/A"
+                                }
+                              </TableCell>
+                              <TableCell>
+                                <ActionDropdown
+                                  itemId={issue.issue_id}
+                                  actions={[
+                                    {
+                                      label: "View Auto-Detection Details",
+                                      icon: Eye,
+                                      onClick: () => console.log(`View details for ${issue.issue_id}`)
+                                    },
+                                    {
+                                      label: "Resolve Duplicates",
+                                      icon: FileText,
+                                      onClick: () => console.log(`Resolve duplicates for ${issue.issue_id}`)
+                                    },
+                                    {
+                                      label: "Dismiss Issue",
+                                      icon: X,
+                                      onClick: () => console.log(`Dismiss issue ${issue.issue_id}`),
+                                      variant: "destructive"
+                                    }
+                                  ]}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
 
-                {/* Pagination */}
-                <div className="flex items-center justify-between mt-6">
-                  <div className="text-sm text-gray-500">
-                    Showing 1 to 6 of 68 results
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm">
-                      ← Previous
-                    </Button>
-                    <div className="flex items-center gap-1">
-                      <Button variant="default" size="sm">1</Button>
-                      <Button variant="outline" size="sm">2</Button>
-                      <Button variant="outline" size="sm">3</Button>
-                      <span className="px-2">...</span>
-                      <Button variant="outline" size="sm">67</Button>
-                      <Button variant="outline" size="sm">68</Button>
-                    </div>
-                    <Button variant="outline" size="sm">
-                      Next →
-                    </Button>
-                  </div>
-                </div>
+                    {/* Pagination */}
+                    {complianceIssues.length > 0 && (
+                      <div className="flex items-center justify-between mt-6">
+                        <div className="text-sm text-gray-500">
+                          Showing {complianceIssues.length} of {complianceIssues.length} results
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" disabled>
+                            ← Previous
+                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button variant="default" size="sm">1</Button>
+                          </div>
+                          <Button variant="outline" size="sm" disabled>
+                            Next →
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
