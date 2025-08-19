@@ -1,6 +1,4 @@
 "use client"
-
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Database, Settings, Bell, User } from "lucide-react"
 import DataTeamOperationalDashboard from "../pages/data team/data-team-operational-dashboard"

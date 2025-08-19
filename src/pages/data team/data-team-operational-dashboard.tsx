@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { summarizeText, generateRecommendations as geminiGenerateRecommendations } from "@/lib/gemini"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,7 +13,7 @@ import { DashboardHeader } from "@/components/ui/dashboard-header"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { SearchFilterBar } from "@/components/ui/search-filter-bar"
 import { ActionDropdown } from "@/components/ui/action-dropdown"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { supabase } from "@/supabaseClient"
 import type { Database } from "@/types/database.types"
 import { doLogout } from "@/utils/logout"
@@ -26,13 +27,9 @@ import {
   Target,
   X,
   CheckCircle,
-  BarChart3,
-  Activity,
   BookOpen,
-  Bot,
   LogOut,
   Loader2,
-  Sparkles
 } from "lucide-react"
 
 type ComplianceIssue = Database["public"]["Tables"]["compliance_issues"]["Row"]
@@ -56,31 +53,27 @@ export default function DataTeamOperationalDashboard() {
   const [generatingDetails, setGeneratingDetails] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [summarizer, setSummarizer] = useState<any>(null)
-  const [isPipelineLoading, setIsPipelineLoading] = useState(false)
+  // Removed unused pipeline loading state
   const rowsPerPage = 6
 
-  // Initialize transformers
+  // Initialize summarizer: prefer Gemini if configured, otherwise fallback to transformers
   useEffect(() => {
-    const initializeTransformers = async () => {
+    const initializeSummarization = async () => {
       try {
-        setIsPipelineLoading(true)
-        console.log('Loading summarization pipeline...')
-        
+        if (import.meta.env.VITE_GEMINI_API_KEY) {
+          setSummarizer('gemini')
+          return
+        }
         const { pipeline } = await import('@xenova/transformers')
         const summarizationPipeline = await pipeline("summarization", "Xenova/distilbart-cnn-12-6")
-        
-        console.log('Summarization pipeline loaded:', summarizationPipeline)
         setSummarizer(summarizationPipeline)
-        console.log('Summarizer successfully set in state')
       } catch (error) {
-        console.error('Error loading summarization pipeline:', error)
+        console.error('Error initializing summarizer:', error)
         setSummarizer('fallback')
       } finally {
-        setIsPipelineLoading(false)
       }
     }
-
-    initializeTransformers()
+    initializeSummarization()
   }, [])
 
   useEffect(() => {
@@ -189,22 +182,34 @@ export default function DataTeamOperationalDashboard() {
       }
 
       console.log('Using AI summarization for generation')
-      
+
       // System description = rule-based baseline, polished by summarizer
       const rawDescription = generateSystemDescription(issue)
       console.log('Raw system description:', rawDescription)
-      
-      const systemDescriptionResult = await summarizer(rawDescription)
-      const systemDescription = systemDescriptionResult[0]?.summary_text || rawDescription
+
+      let systemDescription = rawDescription
+      if (summarizer === 'gemini') {
+        const s = await summarizeText(rawDescription, 120)
+        systemDescription = s || rawDescription
+      } else if (typeof summarizer === 'function') {
+        const systemDescriptionResult = await summarizer(rawDescription)
+        systemDescription = systemDescriptionResult[0]?.summary_text || rawDescription
+      }
       console.log('Summarized system description:', systemDescription)
 
       // Summary = summarizer on issue description
       const summaryInput = issue.description || rawDescription
-      const summaryResult = await summarizer(summaryInput, {
-        max_length: 60,
-        min_length: 20
-      })
-      const summary = summaryResult[0]?.summary_text || generateSummary(issue)
+      let summary = generateSummary(issue)
+      if (summarizer === 'gemini') {
+        const s = await summarizeText(summaryInput, 60)
+        summary = s || summary
+      } else if (typeof summarizer === 'function') {
+        const summaryResult = await summarizer(summaryInput, {
+          max_length: 60,
+          min_length: 20
+        })
+        summary = summaryResult[0]?.summary_text || summary
+      }
       console.log('Generated summary:', summary)
 
       // AI-generated recommendations based on specific issue details
@@ -256,21 +261,29 @@ export default function DataTeamOperationalDashboard() {
 
       console.log('Generating focused AI recommendations with context:', recommendationContext)
 
-      // Generate recommendations using the summarizer
-      const recommendationsResult = await summarizer(recommendationContext, {
-        max_length: 250,
-        min_length: 80
-      })
-
-      const recommendationsText = recommendationsResult[0]?.summary_text || ''
+      // Generate recommendations using Gemini if configured; otherwise use transformers summarizer
+      let recommendationsText = ''
+      if (summarizer === 'gemini') {
+        const recs = await geminiGenerateRecommendations(recommendationContext, 4)
+        if (recs && recs.length > 0) return recs
+      } else if (typeof summarizer === 'function') {
+        const recommendationsResult = await summarizer(recommendationContext, {
+          max_length: 250,
+          min_length: 80
+        })
+        recommendationsText = recommendationsResult[0]?.summary_text || ''
+      }
       console.log('Raw AI recommendations:', recommendationsText)
 
       // Parse and clean recommendations
       const recommendations = recommendationsText
-        .split(/[.!?]+/)
+        .split(/[\n.!?]+/)
         .map(rec => rec.trim())
-        .filter(rec => rec.length > 15 && rec.length < 150)
-        .map(rec => rec.replace(/^\d+\.\s*/, '').trim())
+        .map(rec => rec.replace(/^\s*[-*•]\s*/, ''))
+        .map(rec => rec.replace(/^\d+\.\s*/, ''))
+        .map(rec => rec.replace(/^\*\*(.*?)\*\*:?\s*/, '$1: '))
+        .map(rec => rec.replace(/\*\*(.*?)\*\*/g, '$1'))
+        .filter(rec => rec.length > 15 && rec.length < 200)
         .filter(rec => rec.length > 0)
         .slice(0, 4)
 
@@ -289,59 +302,56 @@ export default function DataTeamOperationalDashboard() {
 
   const generateStructuredRecommendations = (issue: ComplianceIssue): string[] => {
     const issueType = issue.issue_type?.toLowerCase() || ''
-    const entity = issue.entity || 'the affected entity'
+    const entityName = issue.entity || 'the affected entity'
     const severity = issue.severity?.toLowerCase() || 'medium'
 
     // Define specific recommendation templates for each issue type
     const recommendationTemplates = {
       duplicate: [
-        `Run automated deduplication on ${entity} customer records using fuzzy matching on email and phone fields`,
-        `Implement real-time duplicate detection during ${entity} data ingestion to prevent future duplicates`,
-        `Establish data quality scorecards for ${entity} to monitor duplicate rates and set alert thresholds`,
-        `Create customer master data management process for ${entity} to maintain single source of truth`
+        `Run automated deduplication on ${entityName} customer records using fuzzy matching on email and phone fields`,
+        `Implement real-time duplicate detection during ${entityName} data ingestion to prevent future duplicates`,
+        `Establish data quality scorecards for ${entityName} to monitor duplicate rates and set alert thresholds`,
+        `Create customer master data management process for ${entityName} to maintain single source of truth`
       ],
       mismatch: [
-        `Conduct data definition audit for ${entity} and align with regulatory compliance requirements`,
-        `Implement automated data validation rules for ${entity} to catch definition mismatches during ingestion`,
-        `Establish data governance committee for ${entity} to maintain consistent definitions across systems`,
-        `Create data lineage documentation for ${entity} to track definition changes and their impact`
+        `Conduct data definition audit for ${entityName} and align with regulatory compliance requirements`,
+        `Implement automated data validation rules for ${entityName} to catch definition mismatches during ingestion`,
+        `Establish data governance committee for ${entityName} to maintain consistent definitions across systems`,
+        `Create data lineage documentation for ${entityName} to track definition changes and their impact`
       ],
       threshold: [
-        `Review and recalibrate threshold parameters for ${entity} based on current market conditions and risk appetite`,
-        `Implement dynamic threshold adjustment system for ${entity} that adapts to changing business conditions`,
-        `Set up automated threshold monitoring dashboard for ${entity} with real-time alerts and escalation`,
-        `Establish threshold review and approval workflow for ${entity} with quarterly validation cycles`
+        `Review and recalibrate threshold parameters for ${entityName} based on current market conditions and risk appetite`,
+        `Implement dynamic threshold adjustment system for ${entityName} that adapts to changing business conditions`,
+        `Set up automated threshold monitoring dashboard for ${entityName} with real-time alerts and escalation`,
+        `Establish threshold review and approval workflow for ${entityName} with quarterly validation cycles`
       ],
       policy: [
-        `Conduct policy compliance gap analysis for ${entity} and create remediation roadmap`,
-        `Implement policy compliance monitoring system for ${entity} with automated violation detection`,
-        `Establish policy training program for ${entity} stakeholders with regular certification requirements`,
-        `Create policy exception management process for ${entity} with proper approval and documentation`
+        `Conduct policy compliance gap analysis for ${entityName} and create remediation roadmap`,
+        `Implement policy compliance monitoring system for ${entityName} with automated violation detection`,
+        `Establish policy training program for ${entityName} stakeholders with regular certification requirements`,
+        `Create policy exception management process for ${entityName} with proper approval and documentation`
       ]
     }
 
     // Get base recommendations for the issue type
     let recommendations = recommendationTemplates[issueType as keyof typeof recommendationTemplates] || [
-      `Investigate root cause of ${issue.issue_type} issue for ${entity} and document findings`,
-      `Implement preventive controls for ${entity} to avoid similar compliance issues`,
-      `Establish monitoring and alerting for ${entity} to detect early warning signs`,
-      `Create standardized resolution procedures for ${entity} future reference`
+      `Investigate root cause of ${issue.issue_type} issue for ${entityName} and document findings`,
+      `Implement preventive controls for ${entityName} to avoid similar compliance issues`,
+      `Establish monitoring and alerting for ${entityName} to detect early warning signs`,
+      `Create standardized resolution procedures for ${entityName} future reference`
     ]
 
     // Add severity-specific recommendations
     if (severity.includes('high')) {
-      recommendations.unshift(`Immediately escalate ${issue.issue_type} issue for ${entity} to senior management and implement containment measures`)
+      recommendations.unshift(`Immediately escalate ${issue.issue_type} issue for ${entityName} to senior management and implement containment measures`)
     } else if (severity.includes('low')) {
-      recommendations.push(`Schedule regular review of ${entity} compliance status to prevent escalation`)
+      recommendations.push(`Schedule regular review of ${entityName} compliance status to prevent escalation`)
     }
 
     return recommendations.slice(0, 4)
   }
 
-  const generateFallbackRecommendations = (issue: ComplianceIssue): string[] => {
-    // This function is now replaced by generateStructuredRecommendations
-    return generateStructuredRecommendations(issue)
-  }
+  // generateFallbackRecommendations removed (unused)
 
   const calculateConfidence = (issue: ComplianceIssue): number => {
     const dataFields = [issue.issue_type, issue.entity, issue.severity, issue.status, issue.description]
@@ -402,7 +412,6 @@ export default function DataTeamOperationalDashboard() {
   const generateRecommendations = (issue: ComplianceIssue): string[] => {
     const severity = issue.severity?.toLowerCase() || 'medium'
     const issueType = issue.issue_type?.toLowerCase() || ''
-    const entity = issue.entity || 'the affected entity'
 
     let specificRecommendations: string[] = []
 

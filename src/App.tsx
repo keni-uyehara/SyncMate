@@ -35,7 +35,7 @@ export default function App() {
           <Route path="/team-lead/compliance" element={
             <ProtectedRoute>
               <RoleRoute role="teamLead">
-                <TeamLeadPortalNavigation initialView="compliance" onBack={() => window.history.back()} />
+                <TeamLeadPortalNavigation initialView="compliance" />
               </RoleRoute>
             </ProtectedRoute>
           } />
@@ -43,7 +43,7 @@ export default function App() {
           <Route path="/team-lead/insights" element={
             <ProtectedRoute>
               <RoleRoute role="teamLead">
-                <TeamLeadPortalNavigation initialView="insights" onBack={() => window.history.back()} />
+                <TeamLeadPortalNavigation initialView="insights" />
               </RoleRoute>
             </ProtectedRoute>
           } />

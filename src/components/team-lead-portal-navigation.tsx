@@ -2,17 +2,15 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Settings, Bell, User, ArrowLeft } from "lucide-react"
+import { Settings, Bell, User } from "lucide-react"
 
 import TeamLeadDashboard from "../pages/team lead/team-lead-compliance-dashboard"
 import InsightsDashboard from "../pages/team lead/team-lead-insights-dashboard"
 
 export default function TeamLeadPortalNavigation({
   initialView,
-  onBack,
 }: {
   initialView: "compliance" | "insights"
-  onBack: () => void
 }) {
   const [activeView, setActiveView] = useState<"compliance" | "insights">(initialView)
 
