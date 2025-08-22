@@ -1,6 +1,6 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, setPersistence, browserSessionPersistence } from "firebase/auth";
 
 // Check if all required environment variables are present
 const requiredEnvVars = [
@@ -39,5 +39,14 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+
+// Set persistence to session-only so users need to sign in again when they close the tab
+setPersistence(auth, browserSessionPersistence)
+  .then(() => {
+    console.log('Firebase Auth persistence set to session-only');
+  })
+  .catch((error) => {
+    console.error('Error setting Firebase Auth persistence:', error);
+  });
 
 export default app;

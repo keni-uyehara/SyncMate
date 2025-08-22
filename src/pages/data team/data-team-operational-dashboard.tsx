@@ -15,6 +15,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { SearchFilterBar } from "@/components/ui/search-filter-bar"
 import { ActionDropdown } from "@/components/ui/action-dropdown"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ComplianceCharts } from "@/components/ui/compliance-charts"
 import { supabase } from "@/supabaseClient"
 import type { Database } from "@/types/database.types"
 import { doLogout } from "@/utils/logout"
@@ -1527,56 +1528,8 @@ ${context}`
 
           {/* Root Cause Analysis Tab */}
           <TabsContent value="root-cause-analysis" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Issue Trends */}
-              <Card className="col-span-1 lg:col-span-1">
-                <CardHeader>
-                  <CardTitle>Issue Trends</CardTitle>
-                  <CardDescription>
-                    Compliance issues patterns over time
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="border-2 border-dashed rounded-lg flex items-center justify-center h-48 text-center text-gray-500">
-                    <div>
-                      <p className="font-medium">📈 Trend visualizations would appear here</p>
-                      <p className="text-xs">Integration with D3.js / Recharts</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Top Issues Categories */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Top Issues Categories</CardTitle>
-                  <CardDescription>
-                    Most common compliance issues
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {[
-                    { label: "Duplicate Records", value: 65 },
-                    { label: "Definition Mismatch", value: 45 },
-                    { label: "Outdated Thresholds", value: 30 },
-                    { label: "Policy Conflicts", value: 20 },
-                  ].map((item, index) => (
-                    <div key={index}>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>{item.label}</span>
-                        <span className="font-medium">{item.value}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3">
-                        <div
-                          className="bg-black h-3 rounded-full"
-                          style={{ width: `${item.value}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </div>
+            {/* Real Compliance Charts */}
+            <ComplianceCharts />
 
             {/* Entity Collaboration Health */}
             <Card>
