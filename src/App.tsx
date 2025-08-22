@@ -7,6 +7,7 @@ import TeamLeadPortal from './components/team-lead-portal'
 import DataTeamPortal from './components/data-team-portal'
 import TeamLeadPortalNavigation from './components/team-lead-portal-navigation'
 import DataTeamPortalNavigation from './components/data-team-portal-navigation'
+import DataTeamLeadPortal from './components/data-team-lead-portal'
 import NotAuthorized from './NotAuthorized'
 import LoginComponent from './pages/Login'
 
@@ -60,6 +61,14 @@ export default function App() {
             <ProtectedRoute>
               <RoleRoute role="dataTeam">
                 <DataTeamPortalNavigation />
+              </RoleRoute>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/data-team-lead" element={
+            <ProtectedRoute>
+              <RoleRoute role="dataTeamLead">
+                <DataTeamLeadPortal />
               </RoleRoute>
             </ProtectedRoute>
           } />

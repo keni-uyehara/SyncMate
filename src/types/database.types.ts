@@ -138,7 +138,7 @@ export type Database = {
           name: string | null
           password: string | null
           provider: string | null
-          role: string
+          role: 'dataTeam' | 'teamLead' | 'dataTeamLead'
         }
         Insert: {
           created_at?: string
@@ -149,7 +149,7 @@ export type Database = {
           name?: string | null
           password?: string | null
           provider?: string | null
-          role?: string
+          role?: 'dataTeam' | 'teamLead' | 'dataTeamLead'
         }
         Update: {
           created_at?: string
@@ -160,7 +160,90 @@ export type Database = {
           name?: string | null
           password?: string | null
           provider?: string | null
-          role?: string
+          role?: 'dataTeam' | 'teamLead' | 'dataTeamLead'
+        }
+        Relationships: []
+      }
+      team_members: {
+        Row: {
+          id: string
+          firebase_uid: string | null
+          name: string
+          email: string
+          role: 'data_analyst' | 'data_steward' | 'senior_analyst' | 'team_lead'
+          status: 'active' | 'inactive' | 'pending'
+          last_active: string | null
+          assigned_issues: number
+          performance: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          firebase_uid?: string | null
+          name: string
+          email: string
+          role?: 'data_analyst' | 'data_steward' | 'senior_analyst' | 'team_lead'
+          status?: 'active' | 'inactive' | 'pending'
+          last_active?: string | null
+          assigned_issues?: number
+          performance?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          firebase_uid?: string | null
+          name?: string
+          email?: string
+          role?: 'data_analyst' | 'data_steward' | 'senior_analyst' | 'team_lead'
+          status?: 'active' | 'inactive' | 'pending'
+          last_active?: string | null
+          assigned_issues?: number
+          performance?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_firebase_uid_fkey"
+            columns: ["firebase_uid"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["firebase_uid"]
+          }
+        ]
+      }
+      roles: {
+        Row: {
+          id: string
+          name: string
+          description: string
+          permissions: string[]
+          member_count: number
+          is_default: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description: string
+          permissions: string[]
+          member_count?: number
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string
+          permissions?: string[]
+          member_count?: number
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }
