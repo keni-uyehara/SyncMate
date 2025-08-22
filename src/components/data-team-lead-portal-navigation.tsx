@@ -2,21 +2,21 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Settings, Bell, User } from "lucide-react"
+import { Settings, Bell, User, Users, Shield } from "lucide-react"
+import DataTeamLeadDashboard from "../pages/data team/data-team-lead-dashboard"
 
-import TeamLeadDashboard from "../pages/team lead/team-lead-compliance-dashboard"
-import InsightsDashboard from "../pages/team lead/team-lead-insights-dashboard"
-
-export default function TeamLeadPortalNavigation({
+export default function DataTeamLeadPortalNavigation({
   initialView,
 }: {
-  initialView: "compliance" | "insights"
+  initialView?: "dashboard"
 }) {
-  const [activeView, setActiveView] = useState<"compliance" | "insights">(initialView)
+  const [activeView, setActiveView] = useState<"dashboard">(initialView || "dashboard")
 
   // Keep activeView in sync with initialView if prop changes
   useEffect(() => {
-    setActiveView(initialView)
+    if (initialView) {
+      setActiveView(initialView)
+    }
   }, [initialView])
 
   const NavigationHeader = () => (
@@ -27,7 +27,7 @@ export default function TeamLeadPortalNavigation({
           <div className="flex items-center gap-4">
             <div>
               <h1 className="text-2xl font-bold text-[#B11216] -mb-2 tracking-tight">SyncMate</h1>
-              <p className="text-l text-[#E6B54B] tracking-wide">Team Lead</p>
+              <p className="text-l text-[#E6B54B] tracking-wide">Data Team Lead</p>
             </div>
           </div>
 
@@ -35,25 +35,14 @@ export default function TeamLeadPortalNavigation({
           <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-6">
             <button
               type="button"
-              onClick={() => setActiveView("compliance")}
+              onClick={() => setActiveView("dashboard")}
               className={`pb-2 font-medium transition-colors ${
-                activeView === "compliance"
+                activeView === "dashboard"
                   ? "border-b-2 border-[#B11216] text-[#B11216]"
                   : "border-b-2 border-transparent text-gray-600 hover:text-gray-800"
               }`}
             >
-              Compliance Operations
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveView("insights")}
-              className={`pb-2 font-medium transition-colors ${
-                activeView === "insights"
-                  ? "border-b-2 border-[#B11216] text-[#B11216]"
-                  : "border-b-2 border-transparent text-gray-600 hover:text-gray-800"
-              }`}
-            >
-              Strategic Insights
+              Team Management
             </button>
           </div>
 
@@ -61,6 +50,12 @@ export default function TeamLeadPortalNavigation({
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm">
               <Bell className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="sm">
+              <Users className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="sm">
+              <Shield className="w-4 h-4" />
             </Button>
             <Button variant="ghost" size="sm">
               <Settings className="w-4 h-4" />
@@ -77,7 +72,7 @@ export default function TeamLeadPortalNavigation({
   return (
     <div>
       <NavigationHeader />
-      {activeView === "compliance" ? <TeamLeadDashboard /> : <InsightsDashboard />}
+      <DataTeamLeadDashboard />
     </div>
   )
 }

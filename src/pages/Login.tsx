@@ -7,6 +7,8 @@ import {
   signInWithPopup,
 } from "firebase/auth";
 import { auth } from "../firebaseConfig";
+import { supabase } from "../supabaseClient";
+import { updateLastLogin } from "../utils/userUtils";
 
 // UI helpers you already used
 import { FcGoogle } from "react-icons/fc";
@@ -59,16 +61,66 @@ const Login: React.FC = () => {
   const createSession = async () => {
     const current = auth.currentUser;
     if (!current) throw new Error("No user after sign-in");
-    const idToken = await current.getIdToken();
-    const res = await fetch(`${API_BASE}/sessionLogin`, {
-      method: "POST",
-      credentials: "include", // <-- IMPORTANT: save cookie in browser
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error || "Failed to create session");
+    
+    try {
+      const idToken = await current.getIdToken();
+      const res = await fetch(`${API_BASE}/sessionLogin`, {
+        method: "POST",
+        credentials: "include", // <-- IMPORTANT: save cookie in browser
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || "Failed to create session");
+      }
+    } catch (error) {
+      console.warn("Backend session creation failed, continuing without backend:", error);
+      // Continue without backend session - role will be determined by Firebase claims or email
+    }
+  };
+
+  // Check if user exists in Supabase and sync if they do
+  const checkAndSyncUser = async () => {
+    const current = auth.currentUser;
+    if (!current?.email) return false;
+
+    try {
+      // Check if user exists in Supabase
+      const { data: existingUser, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', current.email)
+        .single();
+
+      if (error || !existingUser) {
+        console.log('User not found in database:', current.email);
+        return false;
+      }
+
+      // If user has a temporary firebase_uid, update it with the real one
+      if (existingUser.firebase_uid.startsWith('temp_')) {
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ 
+            firebase_uid: current.uid,
+            email_verified: current.emailVerified,
+            last_login_at: new Date().toISOString()
+          })
+          .eq('email', current.email);
+
+        if (updateError) {
+          console.error('Error updating firebase_uid:', updateError);
+        }
+      } else {
+        // Update last login time
+        await updateLastLogin();
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error checking user in Supabase:', error);
+      return false;
     }
   };
 
@@ -79,6 +131,16 @@ const Login: React.FC = () => {
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
       await createSession();
+      
+      // Check if user exists in database
+      const userExists = await checkAndSyncUser();
+      if (!userExists) {
+        // Sign out the user since they're not authorized
+        await auth.signOut();
+        setErr("Access denied. Please contact your administrator to be added to the system.");
+        return;
+      }
+      
       nav("/", { replace: true }); // ✅ go to root for role-based redirect
     } catch (error: any) {
       const msg = error?.code ? toHumanMessage(error.code) : error?.message;
@@ -96,6 +158,16 @@ const Login: React.FC = () => {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       await createSession();
+      
+      // Check if user exists in database
+      const userExists = await checkAndSyncUser();
+      if (!userExists) {
+        // Sign out the user since they're not authorized
+        await auth.signOut();
+        setErr("Access denied. Please contact your administrator to be added to the system.");
+        return;
+      }
+      
       nav("/", { replace: true }); // ✅ go to root for role-based redirect
     } catch (error: any) {
       const msg = error?.code ? toHumanMessage(error.code) : error?.message;

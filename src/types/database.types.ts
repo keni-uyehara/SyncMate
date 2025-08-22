@@ -40,37 +40,67 @@ export type Database = {
       }
       compliance_issues: {
         Row: {
-          assignee: string | null
-          date_created: string | null
+          issue_id: string
+          record_id: number
+          issue_type: string
           description: string | null
           entity: string
-          issue_id: string
-          issue_type: string
-          record_id: number
-          severity: string | null
-          status: string | null
+          severity: 'Low' | 'Medium' | 'High' | 'Critical' | null
+          status: 'Open' | 'In Progress' | 'Closed' | null
+          assignee: string | null
+          date_created: string | null
+          insights_system_description: string | null
+          insights_summary: string | null
+          insights_recommendations: any | null
+          insights_risk_level: 'low' | 'medium' | 'high' | null
+          insights_confidence: number | null
+          insights_model: string | null
+          insights_generated_at: string | null
+          date_resolved: string | null
+          resolution_notes: string | null
+          resolution_action: string | null
         }
         Insert: {
-          assignee?: string | null
-          date_created?: string | null
+          issue_id: string
+          record_id: number
+          issue_type: string
           description?: string | null
           entity: string
-          issue_id: string
-          issue_type: string
-          record_id: number
-          severity?: string | null
-          status?: string | null
-        }
-        Update: {
+          severity?: 'Low' | 'Medium' | 'High' | 'Critical' | null
+          status?: 'Open' | 'In Progress' | 'Closed' | null
           assignee?: string | null
           date_created?: string | null
+          insights_system_description?: string | null
+          insights_summary?: string | null
+          insights_recommendations?: any | null
+          insights_risk_level?: 'low' | 'medium' | 'high' | null
+          insights_confidence?: number | null
+          insights_model?: string | null
+          insights_generated_at?: string | null
+          date_resolved?: string | null
+          resolution_notes?: string | null
+          resolution_action?: string | null
+        }
+        Update: {
+          issue_id?: string
+          record_id?: number
+          issue_type?: string
           description?: string | null
           entity?: string
-          issue_id?: string
-          issue_type?: string
-          record_id?: number
-          severity?: string | null
-          status?: string | null
+          severity?: 'Low' | 'Medium' | 'High' | 'Critical' | null
+          status?: 'Open' | 'In Progress' | 'Closed' | null
+          assignee?: string | null
+          date_created?: string | null
+          insights_system_description?: string | null
+          insights_summary?: string | null
+          insights_recommendations?: any | null
+          insights_risk_level?: 'low' | 'medium' | 'high' | null
+          insights_confidence?: number | null
+          insights_model?: string | null
+          insights_generated_at?: string | null
+          date_resolved?: string | null
+          resolution_notes?: string | null
+          resolution_action?: string | null
         }
         Relationships: []
       }
@@ -138,7 +168,7 @@ export type Database = {
           name: string | null
           password: string | null
           provider: string | null
-          role: string
+          role: 'dataTeam' | 'teamLead' | 'dataTeamLead'
         }
         Insert: {
           created_at?: string
@@ -149,7 +179,7 @@ export type Database = {
           name?: string | null
           password?: string | null
           provider?: string | null
-          role?: string
+          role?: 'dataTeam' | 'teamLead' | 'dataTeamLead'
         }
         Update: {
           created_at?: string
@@ -160,7 +190,90 @@ export type Database = {
           name?: string | null
           password?: string | null
           provider?: string | null
-          role?: string
+          role?: 'dataTeam' | 'teamLead' | 'dataTeamLead'
+        }
+        Relationships: []
+      }
+      team_members: {
+        Row: {
+          id: string
+          firebase_uid: string | null
+          name: string
+          email: string
+          role: 'data_analyst' | 'data_steward' | 'senior_analyst' | 'team_lead'
+          status: 'active' | 'inactive' | 'pending'
+          last_active: string | null
+          assigned_issues: number
+          performance: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          firebase_uid?: string | null
+          name: string
+          email: string
+          role?: 'data_analyst' | 'data_steward' | 'senior_analyst' | 'team_lead'
+          status?: 'active' | 'inactive' | 'pending'
+          last_active?: string | null
+          assigned_issues?: number
+          performance?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          firebase_uid?: string | null
+          name?: string
+          email?: string
+          role?: 'data_analyst' | 'data_steward' | 'senior_analyst' | 'team_lead'
+          status?: 'active' | 'inactive' | 'pending'
+          last_active?: string | null
+          assigned_issues?: number
+          performance?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_firebase_uid_fkey"
+            columns: ["firebase_uid"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["firebase_uid"]
+          }
+        ]
+      }
+      roles: {
+        Row: {
+          id: string
+          name: string
+          description: string
+          permissions: string[]
+          member_count: number
+          is_default: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description: string
+          permissions: string[]
+          member_count?: number
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string
+          permissions?: string[]
+          member_count?: number
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }

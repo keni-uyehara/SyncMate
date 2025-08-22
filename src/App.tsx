@@ -7,6 +7,7 @@ import TeamLeadPortal from './components/team-lead-portal'
 import DataTeamPortal from './components/data-team-portal'
 import TeamLeadPortalNavigation from './components/team-lead-portal-navigation'
 import DataTeamPortalNavigation from './components/data-team-portal-navigation'
+import DataTeamLeadPortal from './components/data-team-lead-portal'
 import NotAuthorized from './NotAuthorized'
 import LoginComponent from './pages/Login'
 
@@ -35,7 +36,7 @@ export default function App() {
           <Route path="/team-lead/compliance" element={
             <ProtectedRoute>
               <RoleRoute role="teamLead">
-                <TeamLeadPortalNavigation initialView="compliance" onBack={() => window.history.back()} />
+                <TeamLeadPortalNavigation initialView="compliance" />
               </RoleRoute>
             </ProtectedRoute>
           } />
@@ -43,7 +44,7 @@ export default function App() {
           <Route path="/team-lead/insights" element={
             <ProtectedRoute>
               <RoleRoute role="teamLead">
-                <TeamLeadPortalNavigation initialView="insights" onBack={() => window.history.back()} />
+                <TeamLeadPortalNavigation initialView="insights" />
               </RoleRoute>
             </ProtectedRoute>
           } />
@@ -60,6 +61,14 @@ export default function App() {
             <ProtectedRoute>
               <RoleRoute role="dataTeam">
                 <DataTeamPortalNavigation />
+              </RoleRoute>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/data-team-lead" element={
+            <ProtectedRoute>
+              <RoleRoute role="dataTeamLead">
+                <DataTeamLeadPortal />
               </RoleRoute>
             </ProtectedRoute>
           } />
