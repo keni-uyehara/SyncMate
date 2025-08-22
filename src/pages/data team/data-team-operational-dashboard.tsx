@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { summarizeText, generateRecommendations as geminiGenerateRecommendations } from "@/lib/gemini"
+import { summarizeText, generateRecommendations as geminiGenerateRecommendations, getGeminiModel } from "@/lib/gemini"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -56,6 +56,26 @@ export default function DataTeamOperationalDashboard() {
   // Removed unused pipeline loading state
   const rowsPerPage = 6
 
+  // AI Insights state
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+  const [aiExecutiveSummary, setAiExecutiveSummary] = useState<string>("")
+  const [aiHighPriority, setAiHighPriority] = useState<string[]>([])
+  const [aiMediumPriority, setAiMediumPriority] = useState<string[]>([])
+  const [aiStrategicOpportunities, setAiStrategicOpportunities] = useState<string[]>([])
+  const [aiImpact, setAiImpact] = useState<{ resolutionTimeReductionPercent: number; complianceScoreImprovementPercent: number; synergyScoreDeltaPercent: number; riskMitigationDeltaPercent: number } | null>(null)
+  const [aiGeneratedAt, setAiGeneratedAt] = useState<string>("")
+
+  // Issue Resolution state
+  const [isResolutionDialogOpen, setIsResolutionDialogOpen] = useState(false)
+  const [resolutionIssue, setResolutionIssue] = useState<ComplianceIssue | null>(null)
+  const [resolutionStep, setResolutionStep] = useState<'analysis' | 'action' | 'verification' | 'complete'>('analysis')
+  const [resolutionActions, setResolutionActions] = useState<string[]>([])
+  const [selectedAction, setSelectedAction] = useState<string>('')
+  const [resolutionNotes, setResolutionNotes] = useState('')
+  const [resolutionStatus, setResolutionStatus] = useState<'pending' | 'in-progress' | 'Closed' | 'failed'>('pending')
+  const [resolutionLoading, setResolutionLoading] = useState(false)
+
   // Initialize summarizer: prefer Gemini if configured, otherwise fallback to transformers
   useEffect(() => {
     const initializeSummarization = async () => {
@@ -99,7 +119,7 @@ export default function DataTeamOperationalDashboard() {
         const { data, error } = await supabase
           .from("compliance_issues")
           .select("*")
-          .order("date_created", { ascending: false })
+          .order("issue_id", { ascending: true })
           .range(from, to)
         
         if (error) {
@@ -229,6 +249,23 @@ export default function DataTeamOperationalDashboard() {
       }
 
       console.log('Final auto-detection details:', details)
+      // Persist generated insights to Supabase for this issue
+      const { error: updateError } = await supabase
+        .from("compliance_issues")
+        .update({
+          insights_system_description: details.systemDescription,
+          insights_summary: details.summary,
+          insights_recommendations: details.recommendations,
+          insights_risk_level: details.riskLevel,
+          insights_confidence: details.confidence,
+          insights_model: summarizer === "gemini" ? "gemini-1.5-flash" : "distilbart-cnn-12-6",
+          insights_generated_at: new Date().toISOString(),
+        } as any)
+        .eq("issue_id", issue.issue_id)
+
+      if (updateError) {
+        console.error("Error saving insights to Supabase:", updateError.message)
+      }
       setAutoDetectionDetails(details)
     } catch (error) {
       console.error('Error generating auto-detection details:', error)
@@ -488,11 +525,431 @@ export default function DataTeamOperationalDashboard() {
     return details
   }
 
+  const mapRowToAutoDetectionDetails = (row: any): AutoDetectionDetails | null => {
+    const systemDescription = row?.insights_system_description as string | undefined
+    const summary = row?.insights_summary as string | undefined
+    const recommendationsRaw = row?.insights_recommendations as unknown
+    const riskLevel = row?.insights_risk_level as 'low' | 'medium' | 'high' | undefined
+    const confidence = row?.insights_confidence as number | undefined
+
+    if (!systemDescription || !summary || !riskLevel || typeof confidence !== 'number') {
+      return null
+    }
+
+    let recommendations: string[] = []
+    if (Array.isArray(recommendationsRaw)) {
+      recommendations = recommendationsRaw as string[]
+    } else if (typeof recommendationsRaw === 'string') {
+      try {
+        const parsed = JSON.parse(recommendationsRaw)
+        if (Array.isArray(parsed)) recommendations = parsed
+      } catch {
+        // ignore parse errors, keep empty array
+      }
+    }
+
+    return {
+      systemDescription,
+      summary,
+      confidence,
+      recommendations,
+      riskLevel,
+    }
+  }
+
+  const loadOrGenerateInsights = async (issue: ComplianceIssue) => {
+    // Try to load from Supabase first; if not found, generate and save
+    setGeneratingDetails(true)
+    try {
+      const { data, error } = await supabase
+        .from('compliance_issues')
+        .select('*')
+        .eq('issue_id', issue.issue_id)
+        .limit(1)
+        .single()
+
+      if (!error && data) {
+        const fromDb = mapRowToAutoDetectionDetails(data as any)
+        if (fromDb) {
+          setAutoDetectionDetails(fromDb)
+          setGeneratingDetails(false)
+          return
+        }
+      }
+    } catch (err) {
+      // If loading fails, fall back to generation below
+    }
+
+    await generateAutoDetectionDetails(issue)
+  }
+
+  // Build a compact context from a list of issues for Gemini
+  const buildIssuesContext = (issues: ComplianceIssue[]): string => {
+    const head = `Analyze the following compliance issues and generate an AI Insights dashboard summary. Provide structured JSON only.`
+    const mapped = issues.map((i) => {
+      const created = i.date_created ? new Date(i.date_created).toISOString().split("T")[0] : "unknown"
+      return `- id: ${i.issue_id}; type: ${i.issue_type || "unknown"}; entity: ${i.entity || "unknown"}; severity: ${i.severity || "unknown"}; status: ${i.status || "unknown"}; assignee: ${i.assignee || "Unassigned"}; created: ${created}; desc: ${(i.description || "").slice(0, 240)}`
+    }).join("\n")
+    const tail = `Focus on duplicates, mismatches, threshold violations, and policy issues. Be specific and non-generic.`
+    return `${head}\n\n${mapped}\n\n${tail}`
+  }
+
+  type AIInsightsResponse = {
+    executiveSummary: string
+    highPriorityRecommendations: string[]
+    mediumPriorityActions: string[]
+    strategicOpportunities: string[]
+    impact: {
+      resolutionTimeReductionPercent: number
+      complianceScoreImprovementPercent: number
+      synergyScoreDeltaPercent: number
+      riskMitigationDeltaPercent: number
+    }
+  }
+
+  const parseJsonLoose = (text: string): AIInsightsResponse | null => {
+    try {
+      // Strip markdown code fences if present
+      const cleaned = text
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/```\s*$/i, "")
+        .trim()
+      return JSON.parse(cleaned)
+    } catch {
+      return null
+    }
+  }
+
+  const generateAIInsights = async () => {
+    setAiLoading(true)
+    setAiError(null)
+    try {
+      // Pull a representative sample of recent issues (up to 100)
+      const { data: allIssues, error: issuesError } = await supabase
+        .from("compliance_issues")
+        .select("*")
+        .order("date_created", { ascending: false })
+        .limit(100)
+
+      if (issuesError) {
+        throw new Error(issuesError.message)
+      }
+
+      const issues: ComplianceIssue[] = (allIssues || []) as ComplianceIssue[]
+      if (issues.length === 0) {
+        setAiExecutiveSummary("No compliance issues available to analyze.")
+        setAiHighPriority([])
+        setAiMediumPriority([])
+        setAiStrategicOpportunities([])
+        setAiImpact(null)
+        setAiGeneratedAt(new Date().toLocaleString())
+        return
+      }
+
+      const model = getGeminiModel()
+      const context = buildIssuesContext(issues)
+
+      if (model) {
+        const prompt = `You are an expert compliance analyst. Output ONLY valid minified JSON (no prose) with this exact shape:
+{
+  "executiveSummary": string,
+  "highPriorityRecommendations": string[3],
+  "mediumPriorityActions": string[3],
+  "strategicOpportunities": string[3],
+  "impact": {
+    "resolutionTimeReductionPercent": number, 
+    "complianceScoreImprovementPercent": number, 
+    "synergyScoreDeltaPercent": number, 
+    "riskMitigationDeltaPercent": number
+  }
+}
+
+Guidelines:
+- Make items specific to the issues and entities provided.
+- Avoid duplication across lists.
+- Use percentage numbers without the % sign.
+
+Data to analyze:
+${context}`
+
+        const result = await model.generateContent(prompt)
+        const response = await result.response
+        const text = response.text()
+        const parsed = parseJsonLoose(text)
+        if (!parsed) throw new Error("Failed to parse AI Insights JSON.")
+
+        setAiExecutiveSummary(parsed.executiveSummary)
+        setAiHighPriority(parsed.highPriorityRecommendations || [])
+        setAiMediumPriority(parsed.mediumPriorityActions || [])
+        setAiStrategicOpportunities(parsed.strategicOpportunities || [])
+        setAiImpact(parsed.impact || null)
+        setAiGeneratedAt(new Date().toLocaleString())
+      } else {
+        // Fallback: use local summarizer + recommendation helper
+        const context = buildIssuesContext(issues)
+        const exec = await summarizeText(context, 150)
+        const high = await geminiGenerateRecommendations(`${context}\n\nFocus: immediate, high-priority actions specific to issues.`, 3)
+        const med = await geminiGenerateRecommendations(`${context}\n\nFocus: medium priority, process improvements and governance.`, 3)
+        const strat = await geminiGenerateRecommendations(`${context}\n\nFocus: strategic opportunities and collaboration synergies.`, 3)
+
+        setAiExecutiveSummary(exec || "AI summary unavailable.")
+        setAiHighPriority(high || [])
+        setAiMediumPriority(med || [])
+        setAiStrategicOpportunities(strat || [])
+        setAiImpact({
+          resolutionTimeReductionPercent: 20,
+          complianceScoreImprovementPercent: 10,
+          synergyScoreDeltaPercent: 8,
+          riskMitigationDeltaPercent: 12,
+        })
+        setAiGeneratedAt(new Date().toLocaleString())
+      }
+    } catch (e: any) {
+      setAiError(e?.message || "Failed to generate AI insights.")
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  // Generate AI Insights on first render
+  useEffect(() => {
+    generateAIInsights()
+  }, [])
+
   const handleViewAutoDetectionDetails = async (issue: ComplianceIssue) => {
     setSelectedIssue(issue)
     setAutoDetectionDetails(null)
     setIsDialogOpen(true)
-    await generateAutoDetectionDetails(issue)
+    await loadOrGenerateInsights(issue)
+  }
+
+  const handleResolveIssue = (issue: ComplianceIssue) => {
+    setResolutionIssue(issue)
+    setResolutionStep('analysis')
+    setResolutionActions([])
+    setSelectedAction('')
+    setResolutionNotes('')
+    setResolutionStatus('pending')
+    setIsResolutionDialogOpen(true)
+  }
+
+  const generateResolutionActions = async (issue: ComplianceIssue) => {
+    setResolutionLoading(true)
+    try {
+      const issueType = issue.issue_type?.toLowerCase() || ''
+      const entity = issue.entity || 'the affected entity'
+      
+      let actions: string[] = []
+      
+      if (issueType.includes('duplicate')) {
+        actions = [
+          'Run automated deduplication with "keep most recent" strategy',
+          'Merge duplicate records manually with data validation',
+          'Update customer identification processes to prevent future duplicates',
+          'Implement real-time duplicate detection alerts',
+          'Reconcile customer IDs between systems'
+        ]
+      } else if (issueType.includes('mismatch')) {
+        actions = [
+          'Update data definitions to align with regulatory requirements',
+          'Standardize field mappings across all systems',
+          'Implement data validation rules for affected fields',
+          'Create data governance documentation for the entity',
+          'Establish cross-departmental data definition committee'
+        ]
+      } else if (issueType.includes('threshold')) {
+        actions = [
+          'Review and recalibrate threshold parameters',
+          'Implement dynamic threshold adjustment system',
+          'Set up automated threshold monitoring and alerting',
+          'Establish threshold review and approval workflow',
+          'Create threshold performance dashboard'
+        ]
+      } else if (issueType.includes('policy')) {
+        actions = [
+          'Conduct policy compliance audit and gap analysis',
+          'Update operational procedures to align with policies',
+          'Implement policy compliance monitoring system',
+          'Establish policy training program for stakeholders',
+          'Create policy exception handling process'
+        ]
+      } else {
+        actions = [
+          'Investigate root cause and document findings',
+          'Implement preventive controls to avoid recurrence',
+          'Establish monitoring and alerting for early detection',
+          'Create standardized resolution procedures',
+          'Update data quality controls'
+        ]
+      }
+      
+      setResolutionActions(actions)
+      setResolutionStep('action')
+    } catch (error) {
+      console.error('Error generating resolution actions:', error)
+    } finally {
+      setResolutionLoading(false)
+    }
+  }
+
+  const executeResolutionAction = async () => {
+    if (!resolutionIssue || !selectedAction) {
+      console.log('Missing required data:', { resolutionIssue: !!resolutionIssue, selectedAction })
+      return
+    }
+    
+    setResolutionLoading(true)
+    try {
+      console.log('Starting resolution execution for issue:', resolutionIssue.issue_id)
+      
+      // Simulate action execution
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      // Update issue status in Supabase
+      const updateData = {
+        status: 'Closed',
+        assignee: 'Current User' // In real app, get from auth context
+      }
+      
+      console.log('Updating issue with data:', updateData)
+      
+      const { data: updateResult, error } = await supabase
+        .from('compliance_issues')
+        .update(updateData)
+        .eq('issue_id', resolutionIssue.issue_id)
+        .select() // Add this to get the updated record
+      
+      if (error) {
+        console.error('Supabase update error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          fullError: error
+        })
+        throw error
+      }
+      
+      console.log('Successfully updated issue:', updateResult)
+      
+      setResolutionStatus('Closed')
+      setResolutionStep('complete')
+      
+      // Refresh the issues list
+      const from = (currentPage - 1) * rowsPerPage
+      const to = from + rowsPerPage - 1
+      const { data, error: refreshError } = await supabase
+        .from("compliance_issues")
+        .select("*")
+        .order("issue_id", { ascending: true })
+        .range(from, to)
+      
+      if (refreshError) {
+        console.error('Error refreshing issues:', refreshError)
+      } else if (data) {
+        console.log('Successfully refreshed issues list, new count:', data.length)
+        setComplianceIssues(data)
+      }
+      
+    } catch (error: any) {
+      console.error('Error executing resolution action:', {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+        fullError: error
+      })
+      setResolutionStatus('failed')
+    } finally {
+      setResolutionLoading(false)
+    }
+  }
+
+  const closeResolutionDialog = () => {
+    setIsResolutionDialogOpen(false)
+    setResolutionIssue(null)
+    setResolutionStep('analysis')
+    setResolutionActions([])
+    setSelectedAction('')
+    setResolutionNotes('')
+    setResolutionStatus('pending')
+  }
+
+  // Helper functions for workflow display
+  const getWorkflowStep = (issue: ComplianceIssue): { step: string; progress: number } => {
+    const status = issue.status || 'Open'
+    
+    switch (status) {
+      case 'Open':
+        return { step: 'Step 1 of 3: Issue Analysis', progress: 33 }
+      case 'In Progress':
+        return { step: 'Step 2 of 3: Action Execution', progress: 66 }
+      case 'Closed':
+        return { step: 'Completed: Issue resolved', progress: 100 }
+      default:
+        return { step: 'Step 1 of 3: Issue Analysis', progress: 33 }
+    }
+  }
+
+  const getWorkflowStatusColor = (status: string): string => {
+    switch (status) {
+      case 'In Progress':
+        return 'bg-blue-500'
+      case 'Open':
+        return 'bg-yellow-500'
+      case 'Closed':
+        return 'bg-green-500'
+      default:
+        return 'bg-gray-500'
+    }
+  }
+
+  const getWorkflowStatusBadge = (status: string): { className: string; text: string } => {
+    switch (status) {
+      case 'In Progress':
+        return { className: 'bg-blue-100 text-blue-800', text: 'In Progress' }
+      case 'Open':
+        return { className: 'bg-yellow-100 text-yellow-800', text: 'Open' }
+      case 'Closed':
+        return { className: 'bg-green-100 text-green-800', text: 'Closed' }
+      default:
+        return { className: 'bg-gray-100 text-gray-800', text: 'Unknown' }
+    }
+  }
+
+  const handleWorkflowAction = (issue: ComplianceIssue, action: 'view' | 'resolve' | 'review') => {
+    switch (action) {
+      case 'view':
+        handleViewAutoDetectionDetails(issue)
+        break
+      case 'resolve':
+        handleResolveIssue(issue)
+        break
+      case 'review':
+        // Could open a review dialog
+        console.log(`Review issue ${issue.issue_id}`)
+        break
+    }
+  }
+
+  // Get active workflows from current compliance issues
+  const activeWorkflows = complianceIssues.filter(issue => 
+    issue.status && ['Open', 'In Progress'].includes(issue.status)
+  )
+
+  // Get resolved workflows
+  const resolvedWorkflows = complianceIssues.filter(issue => 
+    issue.status === 'Closed'
+  ).slice(0, 2) // Show only 2 most recent resolved
+
+  // Calculate workflow statistics
+  const workflowStats = {
+    active: activeWorkflows.length,
+    pending: complianceIssues.filter(i => i.status === 'Open').length,
+    inProgress: complianceIssues.filter(i => i.status === 'In Progress').length,
+    resolved: complianceIssues.filter(i => i.status === 'Closed').length,
+    total: complianceIssues.length
   }
 
   return (
@@ -643,9 +1100,9 @@ export default function DataTeamOperationalDashboard() {
                                       onClick: () => handleViewAutoDetectionDetails(issue)
                                     },
                                     {
-                                      label: "Resolve Duplicates",
+                                      label: "Resolve Issue",
                                       icon: FileText,
-                                      onClick: () => console.log(`Resolve duplicates for ${issue.issue_id}`)
+                                      onClick: () => handleResolveIssue(issue)
                                     },
                                     {
                                       label: "Dismiss Issue",
@@ -718,68 +1175,146 @@ export default function DataTeamOperationalDashboard() {
               {/* Active Workflows */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Active Workflows</CardTitle>
-                  <CardDescription>
-                    Current resolution processes in progress
-                  </CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Active Workflows</CardTitle>
+                      <CardDescription>
+                        Current resolution processes in progress ({activeWorkflows.length} active)
+                      </CardDescription>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        // Refresh the main issues data
+                        const fetchData = async () => {
+                          setLoading(true)
+                          try {
+                            const from = (currentPage - 1) * rowsPerPage
+                            const to = from + rowsPerPage - 1
+                            const { data, error } = await supabase
+                              .from("compliance_issues")
+                              .select("*")
+                              .order("issue_id", { ascending: true })
+                              .range(from, to)
+                            
+                            if (!error && data) {
+                              setComplianceIssues(data)
+                            }
+                          } catch (error) {
+                            console.error("Error refreshing data:", error)
+                          } finally {
+                            setLoading(false)
+                          }
+                        }
+                        fetchData()
+                      }}
+                      disabled={loading}
+                    >
+                      {loading ? 'Refreshing...' : '🔄 Refresh'}
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Workflow 1 */}
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                      <div>
-                        <p className="font-medium text-sm">COMP-001: Data Reconciliation</p>
-                        <p className="text-xs text-gray-600">
-                          Step 2 of 4: Field mapping validation
-                        </p>
+                  {loading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-sm text-gray-500">Loading workflows...</span>
                       </div>
                     </div>
-                    <Badge className="bg-blue-100 text-blue-800">In Progress</Badge>
-                  </div>
-
-                  {/* Workflow 2 */}
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                      <div>
-                        <p className="font-medium text-sm">COMP-002: Policy Alignment</p>
-                        <p className="text-xs text-gray-600">
-                          Step 1 of 3: Stakeholder review
-                        </p>
-                      </div>
+                  ) : activeWorkflows.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p className="text-sm">No active workflows found</p>
+                      <p className="text-xs mt-1">All issues are either resolved or not yet started</p>
                     </div>
-                    <Badge className="bg-yellow-100 text-yellow-800">Pending Review</Badge>
-                  </div>
+                  ) : (
+                    activeWorkflows.map((issue) => {
+                      const { step, progress } = getWorkflowStep(issue)
+                              const statusColor = getWorkflowStatusColor(issue.status || 'Open')
+        const statusBadge = getWorkflowStatusBadge(issue.status || 'Open')
+                      
+                      return (
+                        <div key={issue.issue_id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                          <div className="flex items-center gap-3 flex-1">
+                            <div className={`w-3 h-3 ${statusColor} rounded-full`}></div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="font-medium text-sm">
+                                  {issue.issue_id}: {issue.issue_type}
+                                </p>
+                                <div className="flex items-center gap-2">
+                                  <Badge className={statusBadge.className}>
+                                    {statusBadge.text}
+                                  </Badge>
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0"
+                                      onClick={() => handleWorkflowAction(issue, 'view')}
+                                    >
+                                      <Eye className="w-3 h-3" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0"
+                                      onClick={() => handleWorkflowAction(issue, 'resolve')}
+                                    >
+                                      <FileText className="w-3 h-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                              <p className="text-xs text-gray-600 mb-2">
+                                {step} • {issue.entity} • {issue.assignee || 'Unassigned'}
+                              </p>
+                              <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                <div
+                                  className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                                  style={{ width: `${progress}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
 
-                  {/* Workflow 3 */}
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                      <div>
-                        <p className="font-medium text-sm">COMP-003: Threshold Update</p>
-                        <p className="text-xs text-gray-600">
-                          Completed: All steps verified
-                        </p>
-                      </div>
+                  {/* Show recent resolved workflows */}
+                  {resolvedWorkflows.length > 0 && (
+                    <div className="mt-6">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">Recently Resolved</h4>
+                      {resolvedWorkflows.map((issue) => {
+                        const { step, progress } = getWorkflowStep(issue)
+                        const statusColor = getWorkflowStatusColor(issue.status || 'Closed')
+                        const statusBadge = getWorkflowStatusBadge(issue.status || 'Closed')
+                        
+                        return (
+                          <div key={issue.issue_id} className="flex items-center justify-between p-3 border rounded-lg bg-green-50/50">
+                            <div className="flex items-center gap-3 flex-1">
+                              <div className={`w-3 h-3 ${statusColor} rounded-full`}></div>
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between mb-1">
+                                  <p className="font-medium text-sm">
+                                    {issue.issue_id}: {issue.issue_type}
+                                  </p>
+                                  <Badge className={statusBadge.className}>
+                                    {statusBadge.text}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-gray-600">
+                                  {step} • {issue.entity} • {issue.assignee || 'Unassigned'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
-                    <Badge className="bg-green-100 text-green-800">Revised</Badge>
-                  </div>
-
-                  {/* Workflow 4 */}
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                      <div>
-                        <p className="font-medium text-sm">COMP-004: Data Reconciliation</p>
-                        <p className="text-xs text-gray-600">
-                          Completed: All steps verified
-                        </p>
-                      </div>
-                    </div>
-                    <Badge className="bg-green-100 text-green-800">Revised</Badge>
-                  </div>
-
+                  )}
                 </CardContent>
               </Card>
 
@@ -798,7 +1333,7 @@ export default function DataTeamOperationalDashboard() {
                       <div className="w-6 h-6 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center font-bold">M</div>
                       <div>
                         <p className="font-medium text-sm">Maria Santos</p>
-                        <p className="text-xs text-gray-600">Resolved 3 issues this week</p>
+                        <p className="text-xs text-gray-600">Resolved {workflowStats.resolved} issues this week</p>
                       </div>
                     </div>
                     <Badge className="bg-gray-100 text-gray-800">Active</Badge>
@@ -810,7 +1345,7 @@ export default function DataTeamOperationalDashboard() {
                       <div className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">J</div>
                       <div>
                         <p className="font-medium text-sm">John Cruz</p>
-                        <p className="text-xs text-gray-600">2 pending reviews</p>
+                        <p className="text-xs text-gray-600">{workflowStats.pending} pending reviews</p>
                       </div>
                     </div>
                     <Badge className="bg-gray-100 text-gray-800">Review</Badge>
@@ -822,7 +1357,7 @@ export default function DataTeamOperationalDashboard() {
                       <div className="w-6 h-6 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center font-bold">A</div>
                       <div>
                         <p className="font-medium text-sm">Ana Reyes</p>
-                        <p className="text-xs text-gray-600">Updated 5 definitions</p>
+                        <p className="text-xs text-gray-600">{workflowStats.inProgress} in progress</p>
                       </div>
                     </div>
                     <Badge className="bg-gray-100 text-gray-800">Updated</Badge>
@@ -830,7 +1365,70 @@ export default function DataTeamOperationalDashboard() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Workflow Statistics */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Active Workflows</p>
+                      <p className="text-2xl font-bold">{workflowStats.active}</p>
+                    </div>
+                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                      <Clock className="w-4 h-4 text-blue-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Pending Review</p>
+                      <p className="text-2xl font-bold">{workflowStats.pending}</p>
+                    </div>
+                    <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                      <AlertTriangle className="w-4 h-4 text-yellow-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Resolved</p>
+                      <p className="text-2xl font-bold">{workflowStats.resolved}</p>
+                    </div>
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Success Rate</p>
+                      <p className="text-2xl font-bold">
+                        {workflowStats.total > 0 ? Math.round((workflowStats.resolved / workflowStats.total) * 100) : 0}%
+                      </p>
+                    </div>
+                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                      <Target className="w-4 h-4 text-purple-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
+
+
 
 
           {/* Root Cause Analysis Tab */}
@@ -1021,88 +1619,116 @@ export default function DataTeamOperationalDashboard() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg font-semibold">Generated Compliance Report</CardTitle>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
-                      🔄 Regenerate
+                    <Button variant="outline" size="sm" className="text-xs bg-transparent" onClick={generateAIInsights} disabled={aiLoading}>
+                      {aiLoading ? 'Generating…' : '🔄 Regenerate'}
                     </Button>
-                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs bg-transparent"
+                      onClick={() => {
+                        const payload = {
+                          generatedAt: aiGeneratedAt || new Date().toISOString(),
+                          executiveSummary: aiExecutiveSummary,
+                          highPriorityRecommendations: aiHighPriority,
+                          mediumPriorityActions: aiMediumPriority,
+                          strategicOpportunities: aiStrategicOpportunities,
+                          impact: aiImpact,
+                        }
+                        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `ai-insights-${Date.now()}.json`
+                        a.click()
+                        URL.revokeObjectURL(url)
+                      }}
+                      disabled={aiLoading}
+                    >
                       📤 Export
                     </Button>
                   </div>
                 </div>
                 <CardDescription className="text-sm text-gray-600">
-                  AI analysis of current compliance landscape and recommendations
+                  {aiError ? (
+                    <span className="text-red-600">{aiError}</span>
+                  ) : (
+                    'AI analysis of current compliance landscape and recommendations'
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6 text-sm">
-                {/* Executive Summary */}
-                <div>
-                  <h4 className="font-semibold text-purple-600 mb-2 text-base">Executive Summary</h4>
-                  <p className="text-gray-700 leading-relaxed">
-                    Based on analysis of 32 compliance issues across BPI and Ayala companies, the system has identified
-                    three critical patterns requiring immediate attention. The primary concern involves duplicate
-                    customer records between BPI and Ayala Land housing loan applications, affecting 15% of joint
-                    applications impacting regulatory reporting accuracy.
-                  </p>
-                </div>
-
-                {/* High Priority Recommendations */}
-                <div className="border-l-4 border-red-500 pl-4 bg-red-50/50 py-3 rounded-r-lg">
-                  <h4 className="font-semibold text-red-600 mb-2 text-base">High Priority Recommendations</h4>
-                  <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
-                    <li>Implement automated Customer ID reconciliation between BPI and Ayala Land Systems</li>
-                    <li>Establish unified SME classification criteria across Globe and BPI partnerships</li>
-                    <li>Update credit scoring threshold for green energy loans with AC Energy within 48 hours</li>
-                  </ul>
-                </div>
-
-                {/* Medium Priority Actions */}
-                <div className="border-l-4 border-yellow-500 pl-4 bg-yellow-50/50 py-3 rounded-r-lg">
-                  <h4 className="font-semibold text-yellow-600 mb-2 text-base">Medium Priority Actions</h4>
-                  <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
-                    <li>Standardise data glossary across all Ayala Companies (estimated 2 weeks effort)</li>
-                    <li>Implement quarterly policy alignment reviews to prevent threshold drift</li>
-                    <li>Enhance steward training on cross-entity data validation procedures</li>
-                  </ul>
-                </div>
-
-                {/* Strategic Opportunities */}
-                <div className="border-l-4 border-green-500 pl-4 bg-green-50/50 py-3 rounded-r-lg">
-                  <h4 className="font-semibold text-green-600 mb-2 text-base">Strategic Opportunities</h4>
-                  <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
-                    <li>87% data alignment with Ayala Land enables expansion of joint housing products</li>
-                    <li>Improved Globe integration could unlock telco-banking synergies for 2.3M customers</li>
-                    <li>AC Energy partnerships shows potential ESG-compliant lending for portfolio growth</li>
-                  </ul>
-                </div>
-
-                {/* Predicted Impact */}
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h4 className="font-semibold text-gray-800 mb-3 text-base">Predicted Impact</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <div className="text-center">
-                      <p className="text-xs text-blue-600 font-medium mb-1">Resolution Time Reduction:</p>
-                      <p className="font-bold text-lg text-blue-700">-35%</p>
+                {aiLoading ? (
+                  <div className="flex items-center justify-center py-10 text-gray-500">Generating AI insights…</div>
+                ) : (
+                  <>
+                    {/* Executive Summary */}
+                    <div>
+                      <h4 className="font-semibold text-purple-600 mb-2 text-base">Executive Summary</h4>
+                      <p className="text-gray-700 leading-relaxed">
+                        {aiExecutiveSummary || 'No summary available.'}
+                      </p>
                     </div>
-                    <div className="text-center">
-                      <p className="text-xs text-blue-600 font-medium mb-1">Compliance Score Improvement:</p>
-                      <p className="font-bold text-lg text-blue-700">-35%</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs text-blue-600 font-medium mb-1">Cross-Entity Synergy Score:</p>
-                      <p className="font-bold text-lg text-blue-700">+12%</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs text-blue-600 font-medium mb-1">Risk Mitigation:</p>
-                      <p className="font-bold text-lg text-blue-700">+12%</p>
-                    </div>
-                  </div>
-                </div>
 
-                {/* Report Footer */}
-                <p className="text-xs text-gray-500 pt-2 border-t">
-                  Report generated on January 15, 2024 at 2:30 PM | Confidence Score: 94% | Based on 1,247 data points
-                  across 5 entities
-                </p>
+                    {/* High Priority Recommendations */}
+                    <div className="border-l-4 border-red-500 pl-4 bg-red-50/50 py-3 rounded-r-lg">
+                      <h4 className="font-semibold text-red-600 mb-2 text-base">High Priority Recommendations</h4>
+                      <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
+                        {(aiHighPriority.length ? aiHighPriority : []).map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Medium Priority Actions */}
+                    <div className="border-l-4 border-yellow-500 pl-4 bg-yellow-50/50 py-3 rounded-r-lg">
+                      <h4 className="font-semibold text-yellow-600 mb-2 text-base">Medium Priority Actions</h4>
+                      <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
+                        {(aiMediumPriority.length ? aiMediumPriority : []).map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Strategic Opportunities */}
+                    <div className="border-l-4 border-green-500 pl-4 bg-green-50/50 py-3 rounded-r-lg">
+                      <h4 className="font-semibold text-green-600 mb-2 text-base">Strategic Opportunities</h4>
+                      <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
+                        {(aiStrategicOpportunities.length ? aiStrategicOpportunities : []).map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Predicted Impact */}
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <h4 className="font-semibold text-gray-800 mb-3 text-base">Predicted Impact</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div className="text-center">
+                          <p className="text-xs text-blue-600 font-medium mb-1">Resolution Time Reduction:</p>
+                          <p className="font-bold text-lg text-blue-700">{aiImpact ? `${aiImpact.resolutionTimeReductionPercent}%` : '—'}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-blue-600 font-medium mb-1">Compliance Score Improvement:</p>
+                          <p className="font-bold text-lg text-blue-700">{aiImpact ? `${aiImpact.complianceScoreImprovementPercent}%` : '—'}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-blue-600 font-medium mb-1">Cross-Entity Synergy Score:</p>
+                          <p className="font-bold text-lg text-blue-700">{aiImpact ? `${aiImpact.synergyScoreDeltaPercent}%` : '—'}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-blue-600 font-medium mb-1">Risk Mitigation:</p>
+                          <p className="font-bold text-lg text-blue-700">{aiImpact ? `${aiImpact.riskMitigationDeltaPercent}%` : '—'}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Report Footer */}
+                    <p className="text-xs text-gray-500 pt-2 border-t">
+                      Report generated on {aiGeneratedAt || new Date().toLocaleString()}
+                    </p>
+                  </>
+                )}
               </CardContent>
             </Card>
 
@@ -1473,6 +2099,190 @@ export default function DataTeamOperationalDashboard() {
                   </div>
                 </div>
               ) : null}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Issue Resolution Dialog */}
+      <Dialog open={isResolutionDialogOpen} onOpenChange={setIsResolutionDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-blue-500" />
+              Resolve Issue: {resolutionIssue?.issue_id}
+            </DialogTitle>
+            <DialogDescription>
+              Step-by-step resolution process for {resolutionIssue?.issue_type} issue affecting {resolutionIssue?.entity}.
+            </DialogDescription>
+          </DialogHeader>
+
+          {resolutionIssue && (
+            <div className="space-y-6">
+              {/* Progress Steps */}
+              <div className="flex items-center justify-between">
+                {[
+                  { key: 'analysis', label: 'Analysis', icon: '🔍' },
+                  { key: 'action', label: 'Action', icon: '⚡' },
+                  { key: 'verification', label: 'Verification', icon: '✅' },
+                  { key: 'complete', label: 'Complete', icon: '🎉' }
+                ].map((step, index) => (
+                  <div key={step.key} className="flex items-center">
+                    <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
+                      resolutionStep === step.key 
+                        ? 'bg-blue-500 text-white' 
+                        : index < ['analysis', 'action', 'verification', 'complete'].indexOf(resolutionStep)
+                          ? 'bg-green-500 text-white'
+                          : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {index < ['analysis', 'action', 'verification', 'complete'].indexOf(resolutionStep) ? '✓' : step.icon}
+                    </div>
+                    <span className={`ml-2 text-sm font-medium ${
+                      resolutionStep === step.key ? 'text-blue-600' : 'text-gray-500'
+                    }`}>
+                      {step.label}
+                    </span>
+                    {index < 3 && (
+                      <div className={`w-16 h-0.5 mx-2 ${
+                        index < ['analysis', 'action', 'verification', 'complete'].indexOf(resolutionStep)
+                          ? 'bg-green-500' 
+                          : 'bg-gray-200'
+                      }`} />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Step Content */}
+              {resolutionStep === 'analysis' && (
+                <div className="space-y-4">
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h3 className="font-semibold text-lg mb-3">Issue Analysis</h3>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="font-medium">Issue Type:</span>
+                        <span className="ml-2">{resolutionIssue.issue_type}</span>
+                      </div>
+                      <div>
+                        <span className="font-medium">Affected Entity:</span>
+                        <span className="ml-2">{resolutionIssue.entity}</span>
+                      </div>
+                      <div>
+                        <span className="font-medium">Severity:</span>
+                        <StatusBadge status={resolutionIssue.severity || "unknown"} variant="severity" />
+                      </div>
+                      <div>
+                        <span className="font-medium">Current Status:</span>
+                        <StatusBadge status={resolutionIssue.status || "unknown"} variant="status" />
+                      </div>
+                    </div>
+                    {resolutionIssue.description && (
+                      <div className="mt-4">
+                        <span className="font-medium">Description:</span>
+                        <p className="mt-1 text-gray-700">{resolutionIssue.description}</p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex justify-end">
+                    <Button onClick={() => generateResolutionActions(resolutionIssue)} disabled={resolutionLoading}>
+                      {resolutionLoading ? 'Analyzing...' : 'Generate Resolution Actions'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {resolutionStep === 'action' && (
+                <div className="space-y-4">
+                  <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                    <h3 className="font-semibold text-lg mb-3">Select Resolution Action</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Choose the most appropriate action to resolve this {resolutionIssue.issue_type} issue:
+                    </p>
+                    
+                    <div className="space-y-2">
+                      {resolutionActions.map((action, index) => (
+                        <label key={index} className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                          <input
+                            type="radio"
+                            name="resolutionAction"
+                            value={action}
+                            checked={selectedAction === action}
+                            onChange={(e) => setSelectedAction(e.target.value)}
+                            className="mt-1"
+                          />
+                          <span className="text-sm">{action}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="block">
+                      <span className="text-sm font-medium text-gray-700">Resolution Notes (Optional)</span>
+                      <textarea
+                        value={resolutionNotes}
+                        onChange={(e) => setResolutionNotes(e.target.value)}
+                        placeholder="Add any additional notes about the resolution..."
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        rows={3}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <Button variant="outline" onClick={() => setResolutionStep('analysis')}>
+                      ← Back to Analysis
+                    </Button>
+                    <Button 
+                      onClick={executeResolutionAction} 
+                      disabled={!selectedAction || resolutionLoading}
+                    >
+                      {resolutionLoading ? 'Executing...' : 'Execute Resolution'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {resolutionStep === 'verification' && (
+                <div className="space-y-4">
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <h3 className="font-semibold text-lg mb-3">Verification in Progress</h3>
+                    <div className="flex items-center justify-center py-8">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Verifying resolution...</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {resolutionStep === 'complete' && (
+                <div className="space-y-4">
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <h3 className="font-semibold text-lg mb-3">Resolution Complete</h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-green-700">
+                        <CheckCircle className="w-5 h-5" />
+                        <span>Issue {resolutionIssue.issue_id} has been successfully resolved</span>
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        <p><strong>Action taken:</strong> {selectedAction}</p>
+                        {resolutionNotes && <p><strong>Notes:</strong> {resolutionNotes}</p>}
+                        <p><strong>Resolved by:</strong> Current User</p>
+                        <p><strong>Resolved on:</strong> {new Date().toLocaleString()}</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-end">
+                    <Button onClick={closeResolutionDialog}>
+                      Close
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
