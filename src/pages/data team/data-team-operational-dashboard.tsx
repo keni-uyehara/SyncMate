@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { summarizeText, generateRecommendations as geminiGenerateRecommendations, getGeminiModel } from "@/lib/gemini"
+import { auth } from "@/firebaseConfig"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -45,6 +46,9 @@ interface AutoDetectionDetails {
 export default function DataTeamOperationalDashboard() {
 
   const [complianceIssues, setComplianceIssues] = useState<ComplianceIssue[]>([])
+  const [users, setUsers] = useState<Database['public']['Tables']['users']['Row'][]>([])
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -54,7 +58,33 @@ export default function DataTeamOperationalDashboard() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [summarizer, setSummarizer] = useState<any>(null)
   // Removed unused pipeline loading state
-  const rowsPerPage = 6
+  const rowsPerPage = 5
+
+  // Helper function to resolve Firebase UID to user name
+  const getAssigneeName = (firebaseUid: string | null) => {
+    if (!firebaseUid) return 'Unassigned'
+    const user = users.find(u => u.firebase_uid === firebaseUid)
+    return user?.name || user?.email || firebaseUid
+  }
+
+  // Function to get current user and role
+  const getCurrentUserAndRole = async () => {
+    const user = auth.currentUser
+    if (user) {
+      setCurrentUser(user)
+      
+      // Get user role from Supabase
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select('role')
+        .eq('firebase_uid', user.uid)
+        .single()
+      
+      if (!error && userData) {
+        setCurrentUserRole(userData.role)
+      }
+    }
+  }
 
   // AI Insights state
   const [aiLoading, setAiLoading] = useState(false)
@@ -100,10 +130,48 @@ export default function DataTeamOperationalDashboard() {
     const fetchData = async () => {
       setLoading(true)
       try {
-        // Get total count
-        const { count, error: countError } = await supabase
+        // Get current user and role first
+        await getCurrentUserAndRole()
+        
+        // Fetch users for assignee resolution
+        const { data: usersData, error: usersError } = await supabase
+          .from('users')
+          .select('*')
+        
+        if (usersError) {
+          console.error('Error fetching users:', usersError)
+        } else {
+          setUsers(usersData || [])
+        }
+
+        // Build query based on user role
+        let query = supabase
+          .from("compliance_issues")
+          .select("*")
+          .order("issue_id", { ascending: true })
+
+        // Filter based on user role
+        if (currentUserRole === 'dataTeamLead' || currentUserRole === 'teamLead') {
+          // Data team leads and team leads see all issues
+          console.log('User is a lead - showing all issues')
+        } else {
+          // Regular data team members only see issues assigned to them
+          if (currentUser?.uid) {
+            query = query.eq('assignee', currentUser.uid)
+            console.log('User is data team member - showing only assigned issues')
+          }
+        }
+
+        // Get total count with same filtering
+        let countQuery = supabase
           .from("compliance_issues")
           .select("*", { count: "exact", head: true })
+
+        if (currentUserRole !== 'dataTeamLead' && currentUserRole !== 'teamLead' && currentUser?.uid) {
+          countQuery = countQuery.eq('assignee', currentUser.uid)
+        }
+
+        const { count, error: countError } = await countQuery
         
         if (countError) {
           console.error("Error fetching count:", countError.message)
@@ -116,11 +184,7 @@ export default function DataTeamOperationalDashboard() {
         const from = (currentPage - 1) * rowsPerPage
         const to = from + rowsPerPage - 1
         
-        const { data, error } = await supabase
-          .from("compliance_issues")
-          .select("*")
-          .order("issue_id", { ascending: true })
-          .range(from, to)
+        const { data, error } = await query.range(from, to)
         
         if (error) {
           console.error("Error fetching compliance issues:", error.message)
@@ -137,7 +201,7 @@ export default function DataTeamOperationalDashboard() {
       }
     }
     fetchData()
-  }, [currentPage])
+  }, [currentPage, currentUserRole, currentUser?.uid])
 
   const totalPages = Math.ceil(totalCount / rowsPerPage)
   const startItem = totalCount > 0 ? (currentPage - 1) * rowsPerPage + 1 : 0
@@ -1028,7 +1092,12 @@ ${context}`
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle>Compliance Issues</CardTitle>
-                    <CardDescription>Track and manage flagged compliance issues</CardDescription>
+                    <CardDescription>
+                      {currentUserRole === 'dataTeamLead' || currentUserRole === 'teamLead' 
+                        ? 'Track and manage all flagged compliance issues across the team'
+                        : 'View and manage issues assigned to you'
+                      }
+                    </CardDescription>
                   </div>
                   <SearchFilterBar
                     searchPlaceholder="Search Issues..."
@@ -1083,7 +1152,7 @@ ${context}`
                               <TableCell>
                                 <StatusBadge status={issue.status || "unknown"} variant="status" />
                               </TableCell>
-                              <TableCell>{issue.assignee || "Unassigned"}</TableCell>
+                              <TableCell>{getAssigneeName(issue.assignee)}</TableCell>
                               <TableCell>
                                 {issue.date_created 
                                   ? new Date(issue.date_created).toLocaleDateString()
@@ -1119,26 +1188,40 @@ ${context}`
                       </TableBody>
                     </Table>
 
-                    {/* Pagination */}
+                    {/* Enhanced Pagination */}
                     {totalCount > 0 && (
-                      <div className="flex items-center justify-between mt-6">
-                        <div className="text-sm text-gray-500">
-                          Showing {startItem} to {endItem} of {totalCount} results
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-6 border-t border-gray-200">
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <span className="font-medium">Results</span>
+                          <span className="text-gray-400">•</span>
+                          <span>
+                            Showing <span className="font-semibold text-gray-900">{startItem}</span> to{' '}
+                            <span className="font-semibold text-gray-900">{endItem}</span> of{' '}
+                            <span className="font-semibold text-gray-900">{totalCount.toLocaleString()}</span>
+                          </span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        
+                        <div className="flex items-center gap-1">
+                          {/* Previous Button */}
                           <Button 
                             variant="outline" 
                             size="sm" 
                             disabled={currentPage === 1}
                             onClick={() => handlePageChange(currentPage - 1)}
+                            className="h-8 px-3 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                           >
-                            ← Previous
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                            Previous
                           </Button>
-                          <div className="flex items-center gap-1">
+                          
+                          {/* Page Numbers */}
+                          <div className="flex items-center gap-1 mx-2">
                             {getPageNumbers().map((page, index) => (
                               page === '...' ? (
-                                <span key={`ellipsis-${index}`} className="px-2 text-gray-500">
-                                  ...
+                                <span key={`ellipsis-${index}`} className="px-2 py-1 text-gray-400">
+                                  •••
                                 </span>
                               ) : (
                                 <Button
@@ -1146,19 +1229,30 @@ ${context}`
                                   variant={currentPage === page ? "default" : "outline"}
                                   size="sm"
                                   onClick={() => handlePageChange(page as number)}
+                                  className={`h-8 w-8 p-0 text-sm font-medium ${
+                                    currentPage === page 
+                                      ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700' 
+                                      : 'text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
+                                  }`}
                                 >
                                   {page}
                                 </Button>
                               )
                             ))}
                           </div>
+                          
+                          {/* Next Button */}
                           <Button 
                             variant="outline" 
                             size="sm" 
                             disabled={currentPage === totalPages || totalPages === 0}
                             onClick={() => handlePageChange(currentPage + 1)}
+                            className="h-8 px-3 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                           >
-                            Next →
+                            Next
+                            <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
                           </Button>
                         </div>
                       </div>
@@ -1268,7 +1362,7 @@ ${context}`
                                 </div>
                               </div>
                               <p className="text-xs text-gray-600 mb-2">
-                                {step} • {issue.entity} • {issue.assignee || 'Unassigned'}
+                                {step} • {issue.entity} • {getAssigneeName(issue.assignee)}
                               </p>
                               <div className="w-full bg-gray-200 rounded-full h-1.5">
                                 <div
@@ -1306,7 +1400,7 @@ ${context}`
                                   </Badge>
                                 </div>
                                 <p className="text-xs text-gray-600">
-                                  {step} • {issue.entity} • {issue.assignee || 'Unassigned'}
+                                  {step} • {issue.entity} • {getAssigneeName(issue.assignee)}
                                 </p>
                               </div>
                             </div>

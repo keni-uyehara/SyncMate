@@ -42,19 +42,25 @@ type ComplianceIssue = Database['public']['Tables']['compliance_issues']['Row']
 export default function DataTeamLeadDashboard() {
   const [complianceIssues, setComplianceIssues] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [users, setUsers] = useState<Database['public']['Tables']['users']['Row'][]>([])
 
   const [roles, setRoles] = useState<Role[]>([])
+
+  const rowsPerPage = 5
 
   // Role Management State
   const [isAddMemberDialogOpen, setIsAddMemberDialogOpen] = useState(false)
   const [isEditRoleDialogOpen, setIsEditRoleDialogOpen] = useState(false)
   const [isPermissionDialogOpen, setIsPermissionDialogOpen] = useState(false)
   const [isAddUserDialogOpen, setIsAddUserDialogOpen] = useState(false)
+  const [isAssignUserDialogOpen, setIsAssignUserDialogOpen] = useState(false)
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null)
   const [selectedRole, setSelectedRole] = useState<Role | null>(null)
   const [selectedUser, setSelectedUser] = useState<Database['public']['Tables']['users']['Row'] | null>(null)
+  const [selectedIssue, setSelectedIssue] = useState<ComplianceIssue | null>(null)
   const [newMember, setNewMember] = useState({
     name: "",
     email: "",
@@ -79,7 +85,51 @@ export default function DataTeamLeadDashboard() {
 
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [currentPage])
+
+  // Pagination helper functions
+  const totalPages = Math.ceil(totalCount / rowsPerPage)
+  const startItem = totalCount > 0 ? (currentPage - 1) * rowsPerPage + 1 : 0
+  const endItem = Math.min(currentPage * rowsPerPage, totalCount)
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+  }
+
+  const getPageNumbers = () => {
+    const pages = []
+    const maxVisiblePages = 5
+    
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i)
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) {
+          pages.push(i)
+        }
+        pages.push('...')
+        pages.push(totalPages)
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1)
+        pages.push('...')
+        for (let i = totalPages - 3; i <= totalPages; i++) {
+          pages.push(i)
+        }
+      } else {
+        pages.push(1)
+        pages.push('...')
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+          pages.push(i)
+        }
+        pages.push('...')
+        pages.push(totalPages)
+      }
+    }
+    
+    return pages
+  }
 
   const fetchData = async () => {
     setLoading(true)
@@ -113,12 +163,27 @@ export default function DataTeamLeadDashboard() {
         setRoles(rolesData || [])
       }
 
-      // Fetch compliance issues
+      // Get total count for compliance issues
+      const { count, error: countError } = await supabase
+        .from('compliance_issues')
+        .select('*', { count: 'exact', head: true })
+
+      if (countError) {
+        console.error('Error fetching compliance issues count:', countError)
+        setTotalCount(0)
+      } else {
+        setTotalCount(count || 0)
+      }
+
+      // Fetch paginated compliance issues
+      const from = (currentPage - 1) * rowsPerPage
+      const to = from + rowsPerPage - 1
+      
       const { data: issuesData, error: issuesError } = await supabase
         .from('compliance_issues')
         .select('*')
         .order('date_created', { ascending: false })
-        .limit(50)
+        .range(from, to)
 
       if (issuesError) {
         console.error('Error fetching compliance issues:', issuesError)
@@ -346,6 +411,30 @@ export default function DataTeamLeadDashboard() {
     }
   }
 
+  const handleAssignUserToIssue = async (issueId: string, userId: string) => {
+    try {
+      const { error } = await supabase
+        .from('compliance_issues')
+        .update({ assignee: userId })
+        .eq('issue_id', issueId)
+
+      if (error) {
+        console.error('Error assigning user to issue:', error)
+        return
+      }
+
+      setComplianceIssues(complianceIssues.map(issue => 
+        issue.issue_id === issueId 
+          ? { ...issue, assignee: userId }
+          : issue
+      ))
+      setIsAssignUserDialogOpen(false)
+      setSelectedIssue(null)
+    } catch (error) {
+      console.error('Error assigning user to issue:', error)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="p-6">
@@ -379,23 +468,6 @@ export default function DataTeamLeadDashboard() {
             iconColor="text-purple-500"
             progress={87}
           />
-        </div>
-
-        {/* Refresh Button */}
-        <div className="flex justify-end mb-4">
-          <Button 
-            variant="outline" 
-            onClick={fetchData}
-            disabled={loading}
-            className="flex items-center gap-2"
-          >
-            {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Activity className="w-4 h-4" />
-            )}
-            {loading ? 'Refreshing...' : 'Refresh Data'}
-          </Button>
         </div>
 
         {/* Main Content Tabs */}
@@ -446,7 +518,7 @@ export default function DataTeamLeadDashboard() {
                               handleUpdateUserRole(user.firebase_uid, value)
                             }
                           >
-                            <SelectTrigger className="w-32">
+                            <SelectTrigger className="w-52">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -526,54 +598,132 @@ export default function DataTeamLeadDashboard() {
                     <div className="text-gray-500">Loading compliance issues...</div>
                   </div>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Issue ID</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Entity</TableHead>
-                        <TableHead>Severity</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Assignee</TableHead>
-                        <TableHead>Created</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {complianceIssues.map((issue) => (
-                        <TableRow key={issue.issue_id}>
-                          <TableCell className="font-medium">{issue.issue_id}</TableCell>
-                          <TableCell>{issue.issue_type}</TableCell>
-                          <TableCell>{issue.entity}</TableCell>
-                          <TableCell>
-                            <StatusBadge status={issue.severity} variant="severity" />
-                          </TableCell>
-                          <TableCell>
-                            <StatusBadge status={issue.status} variant="status" />
-                          </TableCell>
-                          <TableCell>{issue.assignee}</TableCell>
-                          <TableCell>{issue.date_created}</TableCell>
-                          <TableCell>
-                            <ActionDropdown
-                              itemId={issue.issue_id}
-                              actions={[
-                                {
-                                  label: "View Details",
-                                  icon: Eye,
-                                  onClick: () => console.log(`View issue ${issue.issue_id}`)
-                                },
-                                {
-                                  label: "Reassign",
-                                  icon: Users,
-                                  onClick: () => console.log(`Reassign issue ${issue.issue_id}`)
-                                }
-                              ]}
-                            />
-                          </TableCell>
+                  <>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Issue ID</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Entity</TableHead>
+                          <TableHead>Severity</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Assignee</TableHead>
+                          <TableHead>Created</TableHead>
+                          <TableHead>Actions</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {complianceIssues.map((issue) => (
+                          <TableRow key={issue.issue_id}>
+                            <TableCell className="font-medium">{issue.issue_id}</TableCell>
+                            <TableCell>{issue.issue_type}</TableCell>
+                            <TableCell>{issue.entity}</TableCell>
+                            <TableCell>
+                              <StatusBadge status={issue.severity} variant="severity" />
+                            </TableCell>
+                            <TableCell>
+                              <StatusBadge status={issue.status} variant="status" />
+                            </TableCell>
+                            <TableCell>
+                              {issue.assignee ? (
+                                users.find(user => user.firebase_uid === issue.assignee)?.name || 
+                                users.find(user => user.firebase_uid === issue.assignee)?.email || 
+                                issue.assignee
+                              ) : (
+                                <span className="text-gray-500">Unassigned</span>
+                              )}
+                            </TableCell>
+                            <TableCell>{issue.date_created}</TableCell>
+                            <TableCell>
+                              <ActionDropdown
+                                itemId={issue.issue_id}
+                                actions={[
+                                  {
+                                    label: "Assign User",
+                                    icon: Users,
+                                    onClick: () => {
+                                      setSelectedIssue(issue)
+                                      setIsAssignUserDialogOpen(true)
+                                    }
+                                  }
+                                ]}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+
+                                         {/* Enhanced Pagination */}
+                     {totalCount > 0 && (
+                       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-6 border-t border-gray-200">
+                         <div className="flex items-center gap-2 text-sm text-gray-600">
+                           <span className="font-medium">Results</span>
+                           <span className="text-gray-400">•</span>
+                           <span>
+                             Showing <span className="font-semibold text-gray-900">{startItem}</span> to{' '}
+                             <span className="font-semibold text-gray-900">{endItem}</span> of{' '}
+                             <span className="font-semibold text-gray-900">{totalCount.toLocaleString()}</span>
+                           </span>
+                         </div>
+                         
+                         <div className="flex items-center gap-1">
+                           {/* Previous Button */}
+                           <Button 
+                             variant="outline" 
+                             size="sm" 
+                             disabled={currentPage === 1}
+                             onClick={() => handlePageChange(currentPage - 1)}
+                             className="h-8 px-3 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                           >
+                             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                             </svg>
+                             Previous
+                           </Button>
+                           
+                           {/* Page Numbers */}
+                           <div className="flex items-center gap-1 mx-2">
+                             {getPageNumbers().map((page, index) => (
+                               page === '...' ? (
+                                 <span key={`ellipsis-${index}`} className="px-2 py-1 text-gray-400">
+                                   •••
+                                 </span>
+                               ) : (
+                                 <Button
+                                   key={page}
+                                   variant={currentPage === page ? "default" : "outline"}
+                                   size="sm"
+                                   onClick={() => handlePageChange(page as number)}
+                                   className={`h-8 w-8 p-0 text-sm font-medium ${
+                                     currentPage === page 
+                                       ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700' 
+                                       : 'text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
+                                   }`}
+                                 >
+                                   {page}
+                                 </Button>
+                               )
+                             ))}
+                           </div>
+                           
+                           {/* Next Button */}
+                           <Button 
+                             variant="outline" 
+                             size="sm" 
+                             disabled={currentPage === totalPages || totalPages === 0}
+                             onClick={() => handlePageChange(currentPage + 1)}
+                             className="h-8 px-3 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                           >
+                             Next
+                             <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                             </svg>
+                           </Button>
+                         </div>
+                       </div>
+                     )}
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -892,6 +1042,61 @@ export default function DataTeamLeadDashboard() {
               </Button>
               <Button onClick={handleAddUser}>
                 Add User
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign User Dialog */}
+      <Dialog open={isAssignUserDialogOpen} onOpenChange={setIsAssignUserDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign User to Issue</DialogTitle>
+            <DialogDescription>
+              Select a user to assign to this compliance issue: {selectedIssue?.issue_id}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Issue Details</label>
+              <div className="p-3 bg-gray-50 rounded-md">
+                <p className="text-sm"><strong>Type:</strong> {selectedIssue?.issue_type}</p>
+                <p className="text-sm"><strong>Entity:</strong> {selectedIssue?.entity}</p>
+                <p className="text-sm"><strong>Severity:</strong> {selectedIssue?.severity}</p>
+                <p className="text-sm"><strong>Current Assignee:</strong> {
+                  selectedIssue?.assignee ? (
+                    users.find(user => user.firebase_uid === selectedIssue.assignee)?.name || 
+                    users.find(user => user.firebase_uid === selectedIssue.assignee)?.email || 
+                    selectedIssue.assignee
+                  ) : 'Unassigned'
+                }</p>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Select User to Assign</label>
+              <Select
+                onValueChange={(value) => {
+                  if (selectedIssue) {
+                    handleAssignUserToIssue(selectedIssue.issue_id, value)
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a user..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.map((user) => (
+                    <SelectItem key={user.firebase_uid} value={user.firebase_uid}>
+                      {user.name || user.email} ({user.role})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsAssignUserDialogOpen(false)}>
+                Cancel
               </Button>
             </div>
           </div>

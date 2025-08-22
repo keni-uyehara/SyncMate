@@ -40,37 +40,67 @@ export type Database = {
       }
       compliance_issues: {
         Row: {
-          assignee: string | null
-          date_created: string | null
+          issue_id: string
+          record_id: number
+          issue_type: string
           description: string | null
           entity: string
-          issue_id: string
-          issue_type: string
-          record_id: number
-          severity: string | null
-          status: string | null
+          severity: 'Low' | 'Medium' | 'High' | 'Critical' | null
+          status: 'Open' | 'In Progress' | 'Closed' | null
+          assignee: string | null
+          date_created: string | null
+          insights_system_description: string | null
+          insights_summary: string | null
+          insights_recommendations: any | null
+          insights_risk_level: 'low' | 'medium' | 'high' | null
+          insights_confidence: number | null
+          insights_model: string | null
+          insights_generated_at: string | null
+          date_resolved: string | null
+          resolution_notes: string | null
+          resolution_action: string | null
         }
         Insert: {
-          assignee?: string | null
-          date_created?: string | null
+          issue_id: string
+          record_id: number
+          issue_type: string
           description?: string | null
           entity: string
-          issue_id: string
-          issue_type: string
-          record_id: number
-          severity?: string | null
-          status?: string | null
-        }
-        Update: {
+          severity?: 'Low' | 'Medium' | 'High' | 'Critical' | null
+          status?: 'Open' | 'In Progress' | 'Closed' | null
           assignee?: string | null
           date_created?: string | null
+          insights_system_description?: string | null
+          insights_summary?: string | null
+          insights_recommendations?: any | null
+          insights_risk_level?: 'low' | 'medium' | 'high' | null
+          insights_confidence?: number | null
+          insights_model?: string | null
+          insights_generated_at?: string | null
+          date_resolved?: string | null
+          resolution_notes?: string | null
+          resolution_action?: string | null
+        }
+        Update: {
+          issue_id?: string
+          record_id?: number
+          issue_type?: string
           description?: string | null
           entity?: string
-          issue_id?: string
-          issue_type?: string
-          record_id?: number
-          severity?: string | null
-          status?: string | null
+          severity?: 'Low' | 'Medium' | 'High' | 'Critical' | null
+          status?: 'Open' | 'In Progress' | 'Closed' | null
+          assignee?: string | null
+          date_created?: string | null
+          insights_system_description?: string | null
+          insights_summary?: string | null
+          insights_recommendations?: any | null
+          insights_risk_level?: 'low' | 'medium' | 'high' | null
+          insights_confidence?: number | null
+          insights_model?: string | null
+          insights_generated_at?: string | null
+          date_resolved?: string | null
+          resolution_notes?: string | null
+          resolution_action?: string | null
         }
         Relationships: []
       }
