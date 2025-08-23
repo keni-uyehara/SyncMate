@@ -156,6 +156,10 @@ const Login: React.FC = () => {
     setLoading(true);
     try {
       const provider = new GoogleAuthProvider();
+      // Force account selection instead of auto-login
+      provider.setCustomParameters({
+        prompt: "select_account"
+      });
       await signInWithPopup(auth, provider);
       await createSession();
       

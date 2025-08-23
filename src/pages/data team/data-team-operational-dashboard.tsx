@@ -48,6 +48,7 @@ export default function DataTeamOperationalDashboard() {
 
   const [complianceIssues, setComplianceIssues] = useState<ComplianceIssue[]>([])
   const [users, setUsers] = useState<Database['public']['Tables']['users']['Row'][]>([])
+  const [teamMembers, setTeamMembers] = useState<Database['public']['Tables']['team_members']['Row'][]>([])
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -66,6 +67,23 @@ export default function DataTeamOperationalDashboard() {
     if (!firebaseUid) return 'Unassigned'
     const user = users.find(u => u.firebase_uid === firebaseUid)
     return user?.name || user?.email || firebaseUid
+  }
+
+  // Helper function to format dates consistently
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return "N/A"
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return "Invalid Date"
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      })
+    } catch (error) {
+      console.error('Error formatting date:', error)
+      return "Invalid Date"
+    }
   }
 
   // Function to get current user and role
@@ -96,6 +114,7 @@ export default function DataTeamOperationalDashboard() {
   const [aiStrategicOpportunities, setAiStrategicOpportunities] = useState<string[]>([])
   const [aiImpact, setAiImpact] = useState<{ resolutionTimeReductionPercent: number; complianceScoreImprovementPercent: number; synergyScoreDeltaPercent: number; riskMitigationDeltaPercent: number } | null>(null)
   const [aiGeneratedAt, setAiGeneratedAt] = useState<string>("")
+  const [aiInsightsId, setAiInsightsId] = useState<string | null>(null)
 
   // Issue Resolution state
   const [isResolutionDialogOpen, setIsResolutionDialogOpen] = useState(false)
@@ -106,6 +125,7 @@ export default function DataTeamOperationalDashboard() {
   const [resolutionNotes, setResolutionNotes] = useState('')
   const [resolutionStatus, setResolutionStatus] = useState<'pending' | 'in-progress' | 'Closed' | 'failed'>('pending')
   const [resolutionLoading, setResolutionLoading] = useState(false)
+  const [resolutionSuccess, setResolutionSuccess] = useState(false)
 
   // Initialize summarizer: prefer Gemini if configured, otherwise fallback to transformers
   useEffect(() => {
@@ -143,6 +163,33 @@ export default function DataTeamOperationalDashboard() {
           console.error('Error fetching users:', usersError)
         } else {
           setUsers(usersData || [])
+        }
+
+        // Fetch data team members for steward activity
+        const { data: teamMembersData, error: teamMembersError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('role', 'dataTeam')
+          .order('last_login_at', { ascending: false })
+        
+        if (teamMembersError) {
+          console.error('Error fetching team members:', teamMembersError)
+        } else {
+          // Transform users data to match team_members structure
+          const transformedTeamMembers = (teamMembersData || []).map(user => ({
+            id: user.firebase_uid,
+            firebase_uid: user.firebase_uid,
+            name: user.name || user.email || 'Unknown User',
+            email: user.email || '',
+            role: 'data_analyst' as const,
+            status: 'active' as const,
+            last_active: user.last_login_at,
+            assigned_issues: 0, // Will be calculated from compliance issues
+            performance: 85, // Default performance score
+            created_at: user.created_at,
+            updated_at: user.last_login_at || user.created_at
+          }))
+          setTeamMembers(transformedTeamMembers)
         }
 
         // Build query based on user role
@@ -474,7 +521,7 @@ export default function DataTeamOperationalDashboard() {
     const severity = issue.severity || 'unknown'
     const description = issue.description || 'No specific description provided'
     const assignee = issue.assignee || 'Unassigned'
-    const dateCreated = issue.date_created ? new Date(issue.date_created).toLocaleDateString() : 'unknown date'
+    const dateCreated = formatDate(issue.date_created) || 'unknown date'
 
     if (issueType.includes('duplicate')) {
       return `The system has identified duplicate records for ${entity} with issue ID ${issue.issue_id}. This duplication was detected on ${dateCreated} and affects data integrity. The issue is currently assigned to ${assignee} and has a ${severity} severity level. ${description}`
@@ -652,7 +699,7 @@ export default function DataTeamOperationalDashboard() {
   const buildIssuesContext = (issues: ComplianceIssue[]): string => {
     const head = `Analyze the following compliance issues and generate an AI Insights dashboard summary. Provide structured JSON only.`
     const mapped = issues.map((i) => {
-      const created = i.date_created ? new Date(i.date_created).toISOString().split("T")[0] : "unknown"
+      const created = i.date_created ? formatDate(i.date_created) : "unknown"
       return `- id: ${i.issue_id}; type: ${i.issue_type || "unknown"}; entity: ${i.entity || "unknown"}; severity: ${i.severity || "unknown"}; status: ${i.status || "unknown"}; assignee: ${i.assignee || "Unassigned"}; created: ${created}; desc: ${(i.description || "").slice(0, 240)}`
     }).join("\n")
     const tail = `Focus on duplicates, mismatches, threshold violations, and policy issues. Be specific and non-generic.`
@@ -690,12 +737,19 @@ export default function DataTeamOperationalDashboard() {
     setAiLoading(true)
     setAiError(null)
     try {
-      // Pull a representative sample of recent issues (up to 100)
-      const { data: allIssues, error: issuesError } = await supabase
+      // Pull a representative sample of recent issues (up to 100) with role-based filtering
+      let aiQuery = supabase
         .from("compliance_issues")
         .select("*")
         .order("date_created", { ascending: false })
         .limit(100)
+
+      // Apply role-based filtering for AI insights
+      if (currentUserRole !== 'dataTeamLead' && currentUserRole !== 'teamLead' && currentUser?.uid) {
+        aiQuery = aiQuery.eq('assignee', currentUser.uid)
+      }
+
+      const { data: allIssues, error: issuesError } = await aiQuery
 
       if (issuesError) {
         throw new Error(issuesError.message)
@@ -750,6 +804,9 @@ ${context}`
         setAiStrategicOpportunities(parsed.strategicOpportunities || [])
         setAiImpact(parsed.impact || null)
         setAiGeneratedAt(new Date().toLocaleString())
+
+        // Store AI insights in Supabase
+        await storeAIInsightsInSupabase(parsed.executiveSummary, parsed.highPriorityRecommendations || [], parsed.mediumPriorityActions || [], parsed.strategicOpportunities || [], parsed.impact, issues.length)
       } else {
         // Fallback: use local summarizer + recommendation helper
         const context = buildIssuesContext(issues)
@@ -769,6 +826,14 @@ ${context}`
           riskMitigationDeltaPercent: 12,
         })
         setAiGeneratedAt(new Date().toLocaleString())
+
+        // Store AI insights in Supabase
+        await storeAIInsightsInSupabase(exec || "AI summary unavailable.", high || [], med || [], strat || [], {
+          resolutionTimeReductionPercent: 20,
+          complianceScoreImprovementPercent: 10,
+          synergyScoreDeltaPercent: 8,
+          riskMitigationDeltaPercent: 12,
+        }, issues.length)
       }
     } catch (e: any) {
       setAiError(e?.message || "Failed to generate AI insights.")
@@ -777,19 +842,157 @@ ${context}`
     }
   }
 
-  // Generate AI Insights on first render
+  // Load existing AI insights on first render
   useEffect(() => {
-    generateAIInsights()
-  }, [])
+    loadExistingAIInsights()
+  }, [currentUser?.uid])
+
+  // Function to load existing AI insights from Supabase
+  const loadExistingAIInsights = async () => {
+    if (!currentUser?.uid) return
+    
+    try {
+      const { data, error } = await supabase
+        .from('ai_insights')
+        .select('*')
+        .eq('firebase_uid', currentUser.uid)
+        .eq('dashboard_type', 'operational')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+      
+      if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        console.error('Error loading AI insights:', error)
+        return
+      }
+      
+      if (data) {
+        setAiInsightsId(data.id)
+        setAiExecutiveSummary(data.executive_summary || '')
+        setAiHighPriority(data.high_priority_recommendations || [])
+        setAiMediumPriority(data.medium_priority_actions || [])
+        setAiStrategicOpportunities(data.strategic_opportunities || [])
+        setAiImpact(data.impact_data as any || null)
+        setAiGeneratedAt(new Date(data.created_at).toLocaleString())
+      }
+    } catch (error) {
+      console.error('Error loading AI insights:', error)
+    }
+  }
+
+  // Helper function to create audit trail entries
+  const createAuditEntry = async (action: string, metadata: any = {}) => {
+    try {
+      const { error } = await supabase
+        .from('audit_events')
+        .insert({
+          action,
+          firebase_uid: currentUser?.uid,
+          metadata: {
+            ...metadata,
+            user_email: currentUser?.email,
+            user_name: currentUser?.displayName || currentUser?.email,
+            timestamp: new Date().toISOString()
+          }
+        })
+      
+      if (error) {
+        console.error('Error creating audit entry:', error)
+      }
+    } catch (error) {
+      console.error('Error creating audit entry:', error)
+    }
+  }
+
+  // Function to store AI insights in Supabase
+  const storeAIInsightsInSupabase = async (
+    executiveSummary: string,
+    highPriority: string[],
+    mediumPriority: string[],
+    strategicOpportunities: string[],
+    impact: any,
+    insightsCount: number
+  ) => {
+    if (!currentUser?.uid) return
+
+    try {
+      const insightsData = {
+        firebase_uid: currentUser.uid,
+        dashboard_type: 'operational',
+        executive_summary: executiveSummary,
+        high_priority_recommendations: highPriority,
+        medium_priority_actions: mediumPriority,
+        strategic_opportunities: strategicOpportunities,
+        impact_data: impact,
+        insights_count: insightsCount,
+        generation_type: 'manual'
+      }
+
+      if (aiInsightsId) {
+        // Update existing insights
+        const { data: updateData, error: updateError } = await supabase
+          .from('ai_insights')
+          .update(insightsData)
+          .eq('id', aiInsightsId)
+          .select()
+          .single()
+        
+        if (updateError) {
+          console.error('Error updating AI insights:', updateError)
+        } else if (updateData) {
+          setAiInsightsId(updateData.id)
+        }
+      } else {
+        // Create new insights
+        const { data: insertData, error: insertError } = await supabase
+          .from('ai_insights')
+          .insert(insightsData)
+          .select()
+          .single()
+        
+        if (insertError) {
+          console.error('Error creating AI insights:', insertError)
+        } else if (insertData) {
+          setAiInsightsId(insertData.id)
+        }
+      }
+
+      // Create audit trail entry for AI insights generation
+      await createAuditEntry('ai_insights_generated', {
+        insights_count: insightsCount,
+        executive_summary_length: executiveSummary.length,
+        high_priority_count: highPriority.length,
+        medium_priority_count: mediumPriority.length,
+        strategic_opportunities_count: strategicOpportunities.length,
+        generation_type: 'manual'
+      })
+    } catch (error) {
+      console.error('Error storing AI insights:', error)
+    }
+  }
 
   const handleViewAutoDetectionDetails = async (issue: ComplianceIssue) => {
     setSelectedIssue(issue)
     setAutoDetectionDetails(null)
     setIsDialogOpen(true)
     await loadOrGenerateInsights(issue)
+    
+    // Update user's last_login_at timestamp when viewing details
+    if (currentUser?.uid) {
+      const { error: userError } = await supabase
+        .from('users')
+        .update({ 
+          last_login_at: new Date().toISOString()
+        })
+        .eq('firebase_uid', currentUser.uid)
+      
+      if (userError) {
+        console.error('Error updating user activity:', userError)
+      }
+    }
   }
 
-  const handleResolveIssue = (issue: ComplianceIssue) => {
+  const handleResolveIssue = async (issue: ComplianceIssue) => {
     setResolutionIssue(issue)
     setResolutionStep('analysis')
     setResolutionActions([])
@@ -797,6 +1000,20 @@ ${context}`
     setResolutionNotes('')
     setResolutionStatus('pending')
     setIsResolutionDialogOpen(true)
+    
+    // Update user's last_login_at timestamp when starting resolution
+    if (currentUser?.uid) {
+      const { error: userError } = await supabase
+        .from('users')
+        .update({ 
+          last_login_at: new Date().toISOString()
+        })
+        .eq('firebase_uid', currentUser.uid)
+      
+      if (userError) {
+        console.error('Error updating user activity:', userError)
+      }
+    }
   }
 
   const generateResolutionActions = async (issue: ComplianceIssue) => {
@@ -873,8 +1090,8 @@ ${context}`
       
       // Update issue status in Supabase
       const updateData = {
-        status: 'Closed',
-        assignee: 'Current User' // In real app, get from auth context
+        status: 'Closed' as const,
+        assignee: currentUser?.uid || 'Current User' // Use actual current user UID
       }
       
       console.log('Updating issue with data:', updateData)
@@ -884,6 +1101,20 @@ ${context}`
         .update(updateData)
         .eq('issue_id', resolutionIssue.issue_id)
         .select() // Add this to get the updated record
+
+      // Update user's last_login_at timestamp
+      if (currentUser?.uid) {
+        const { error: userError } = await supabase
+          .from('users')
+          .update({ 
+            last_login_at: new Date().toISOString()
+          })
+          .eq('firebase_uid', currentUser.uid)
+        
+        if (userError) {
+          console.error('Error updating user activity:', userError)
+        }
+      }
       
       if (error) {
         console.error('Supabase update error details:', {
@@ -900,21 +1131,79 @@ ${context}`
       
       setResolutionStatus('Closed')
       setResolutionStep('complete')
+      setResolutionSuccess(true)
       
-      // Refresh the issues list
+      // Refresh the issues list with proper role-based filtering
       const from = (currentPage - 1) * rowsPerPage
       const to = from + rowsPerPage - 1
-      const { data, error: refreshError } = await supabase
+      
+      // Build query with same filtering logic as main data fetch
+      let refreshQuery = supabase
         .from("compliance_issues")
         .select("*")
         .order("issue_id", { ascending: true })
-        .range(from, to)
+
+      // Apply role-based filtering
+      if (currentUserRole !== 'dataTeamLead' && currentUserRole !== 'teamLead' && currentUser?.uid) {
+        refreshQuery = refreshQuery.eq('assignee', currentUser.uid)
+      }
+      
+      const { data, error: refreshError } = await refreshQuery.range(from, to)
       
       if (refreshError) {
         console.error('Error refreshing issues:', refreshError)
       } else if (data) {
         console.log('Successfully refreshed issues list, new count:', data.length)
         setComplianceIssues(data)
+        
+        // If current page is empty and not the first page, go to previous page
+        if (data.length === 0 && currentPage > 1) {
+          setCurrentPage(currentPage - 1)
+        }
+      }
+      
+      // Also refresh the total count
+      let countQuery = supabase
+        .from("compliance_issues")
+        .select("*", { count: "exact", head: true })
+
+      if (currentUserRole !== 'dataTeamLead' && currentUserRole !== 'teamLead' && currentUser?.uid) {
+        countQuery = countQuery.eq('assignee', currentUser.uid)
+      }
+
+      const { count, error: countError } = await countQuery
+      
+      if (countError) {
+        console.error("Error refreshing count:", countError.message)
+      } else {
+        setTotalCount(count || 0)
+      }
+
+      // Refresh team members data to update activity
+      const { data: refreshedTeamMembers, error: teamMembersRefreshError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('role', 'dataTeam')
+        .order('last_login_at', { ascending: false })
+      
+      if (teamMembersRefreshError) {
+        console.error('Error refreshing team members:', teamMembersRefreshError)
+      } else {
+        // Transform users data to match team_members structure
+        const transformedTeamMembers = (refreshedTeamMembers || []).map(user => ({
+          id: user.firebase_uid,
+          firebase_uid: user.firebase_uid,
+          name: user.name || user.email || 'Unknown User',
+          email: user.email || '',
+          role: 'data_analyst' as const,
+          status: 'active' as const,
+          last_active: user.last_login_at,
+          assigned_issues: 0, // Will be calculated from compliance issues
+          performance: 85, // Default performance score
+          created_at: user.created_at,
+          updated_at: user.last_login_at || user.created_at
+        }))
+        setTeamMembers(transformedTeamMembers)
       }
       
     } catch (error: any) {
@@ -939,6 +1228,7 @@ ${context}`
     setSelectedAction('')
     setResolutionNotes('')
     setResolutionStatus('pending')
+    setResolutionSuccess(false)
   }
 
   // Helper functions for workflow display
@@ -1015,6 +1305,89 @@ ${context}`
     inProgress: complianceIssues.filter(i => i.status === 'In Progress').length,
     resolved: complianceIssues.filter(i => i.status === 'Closed').length,
     total: complianceIssues.length
+  }
+
+  // Helper function to get steward activity data
+  const getStewardActivity = (teamMember: any) => {
+    const memberIssues = complianceIssues.filter(issue => 
+      issue.assignee === teamMember.firebase_uid
+    )
+    
+    const resolvedThisWeek = memberIssues.filter(issue => 
+      issue.status === 'Closed' && 
+      issue.date_created && 
+      new Date(issue.date_created) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    ).length
+    
+    const pendingReviews = memberIssues.filter(issue => 
+      issue.status === 'Open'
+    ).length
+    
+    const inProgress = memberIssues.filter(issue => 
+      issue.status === 'In Progress'
+    ).length
+    
+    return {
+      resolvedThisWeek,
+      pendingReviews,
+      inProgress,
+      totalAssigned: memberIssues.length,
+      performance: teamMember.performance || 85
+    }
+  }
+
+  // Helper function to get activity status
+  const getActivityStatus = (teamMember: any) => {
+    if (!teamMember.last_active) return 'Inactive'
+    
+    const lastActive = new Date(teamMember.last_active)
+    const now = new Date()
+    const hoursSinceActive = (now.getTime() - lastActive.getTime()) / (1000 * 60 * 60)
+    
+    if (hoursSinceActive < 1) return 'Active'
+    if (hoursSinceActive < 24) return 'Recent'
+    if (hoursSinceActive < 168) return 'This Week'
+    return 'Inactive'
+  }
+
+  // Helper function to get status badge styling
+  const getStatusBadgeStyle = (status: string) => {
+    switch (status) {
+      case 'Active':
+        return 'bg-green-100 text-green-800'
+      case 'Recent':
+        return 'bg-blue-100 text-blue-800'
+      case 'This Week':
+        return 'bg-yellow-100 text-yellow-800'
+      case 'Inactive':
+        return 'bg-gray-100 text-gray-800'
+      default:
+        return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  // Helper function to get initials from name
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(word => word.charAt(0))
+      .join('')
+      .toUpperCase()
+      .slice(0, 2)
+  }
+
+  // Helper function to get avatar color based on name
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      'bg-purple-100 text-purple-600',
+      'bg-blue-100 text-blue-600', 
+      'bg-green-100 text-green-600',
+      'bg-yellow-100 text-yellow-600',
+      'bg-red-100 text-red-600',
+      'bg-indigo-100 text-indigo-600'
+    ]
+    const index = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length
+    return colors[index]
   }
 
   return (
@@ -1155,10 +1528,7 @@ ${context}`
                               </TableCell>
                               <TableCell>{getAssigneeName(issue.assignee)}</TableCell>
                               <TableCell>
-                                {issue.date_created 
-                                  ? new Date(issue.date_created).toLocaleDateString()
-                                  : "N/A"
-                                }
+                                {formatDate(issue.date_created)}
                               </TableCell>
                               <TableCell>
                                 <ActionDropdown
@@ -1281,20 +1651,52 @@ ${context}`
                       variant="outline" 
                       size="sm"
                       onClick={() => {
-                        // Refresh the main issues data
+                        // Refresh the main issues data and team members
                         const fetchData = async () => {
                           setLoading(true)
                           try {
                             const from = (currentPage - 1) * rowsPerPage
                             const to = from + rowsPerPage - 1
-                            const { data, error } = await supabase
+                            
+                            // Build query with same filtering logic as main data fetch
+                            let refreshQuery = supabase
                               .from("compliance_issues")
                               .select("*")
                               .order("issue_id", { ascending: true })
-                              .range(from, to)
+
+                            // Apply role-based filtering
+                            if (currentUserRole !== 'dataTeamLead' && currentUserRole !== 'teamLead' && currentUser?.uid) {
+                              refreshQuery = refreshQuery.eq('assignee', currentUser.uid)
+                            }
+                            
+                            const { data, error } = await refreshQuery.range(from, to)
                             
                             if (!error && data) {
                               setComplianceIssues(data)
+                            }
+
+                            // Also refresh team members data
+                            const { data: refreshedTeamMembers, error: teamMembersError } = await supabase
+                              .from('users')
+                              .select('*')
+                              .eq('role', 'dataTeam')
+                              .order('last_login_at', { ascending: false })
+                            
+                            if (!teamMembersError && refreshedTeamMembers) {
+                              const transformedTeamMembers = refreshedTeamMembers.map(user => ({
+                                id: user.firebase_uid,
+                                firebase_uid: user.firebase_uid,
+                                name: user.name || user.email || 'Unknown User',
+                                email: user.email || '',
+                                role: 'data_analyst' as const,
+                                status: 'active' as const,
+                                last_active: user.last_login_at,
+                                assigned_issues: 0,
+                                performance: 85,
+                                created_at: user.created_at,
+                                updated_at: user.last_login_at || user.created_at
+                              }))
+                              setTeamMembers(transformedTeamMembers)
                             }
                           } catch (error) {
                             console.error("Error refreshing data:", error)
@@ -1418,45 +1820,74 @@ ${context}`
                 <CardHeader>
                   <CardTitle>Steward Activity</CardTitle>
                   <CardDescription>
-                    Data steward engagement and activity
+                    Real-time data steward engagement and activity
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Steward 1 */}
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-6 h-6 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center font-bold">M</div>
-                      <div>
-                        <p className="font-medium text-sm">Maria Santos</p>
-                        <p className="text-xs text-gray-600">Resolved {workflowStats.resolved} issues this week</p>
+                  {loading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-sm text-gray-500">Loading steward activity...</span>
                       </div>
                     </div>
-                    <Badge className="bg-gray-100 text-gray-800">Active</Badge>
-                  </div>
-
-                  {/* Steward 2 */}
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">J</div>
-                      <div>
-                        <p className="font-medium text-sm">John Cruz</p>
-                        <p className="text-xs text-gray-600">{workflowStats.pending} pending reviews</p>
-                      </div>
+                  ) : teamMembers.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p className="text-sm">No active team members found</p>
+                      <p className="text-xs mt-1">Team members will appear here when they are added to the system</p>
                     </div>
-                    <Badge className="bg-gray-100 text-gray-800">Review</Badge>
-                  </div>
-
-                  {/* Steward 3 */}
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-6 h-6 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center font-bold">A</div>
-                      <div>
-                        <p className="font-medium text-sm">Ana Reyes</p>
-                        <p className="text-xs text-gray-600">{workflowStats.inProgress} in progress</p>
-                      </div>
+                  ) : (
+                    teamMembers.slice(0, 5).map((member) => {
+                      const activity = getStewardActivity(member)
+                      const status = getActivityStatus(member)
+                      const initials = getInitials(member.name)
+                      const avatarColor = getAvatarColor(member.name)
+                      
+                      return (
+                        <div key={member.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-6 h-6 ${avatarColor} rounded-full flex items-center justify-center font-bold text-xs`}>
+                              {initials}
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">{member.name}</p>
+                              <p className="text-xs text-gray-600">
+                                {activity.resolvedThisWeek > 0 
+                                  ? `Resolved ${activity.resolvedThisWeek} issues this week`
+                                  : activity.pendingReviews > 0
+                                    ? `${activity.pendingReviews} pending reviews`
+                                    : activity.inProgress > 0
+                                      ? `${activity.inProgress} in progress`
+                                      : `${activity.totalAssigned} assigned issues`
+                                }
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Performance: {activity.performance}% • Role: {member.role.replace('_', ' ')}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <Badge className={getStatusBadgeStyle(status)}>
+                              {status}
+                            </Badge>
+                            {member.last_active && (
+                              <p className="text-xs text-gray-500">
+                                {new Date(member.last_active).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                  
+                  {teamMembers.length > 5 && (
+                    <div className="text-center pt-2">
+                      <p className="text-xs text-gray-500">
+                        +{teamMembers.length - 5} more team members
+                      </p>
                     </div>
-                    <Badge className="bg-gray-100 text-gray-800">Updated</Badge>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -1990,7 +2421,7 @@ ${context}`
               Auto-Detection Details: {selectedIssue?.issue_id}
             </DialogTitle>
             <DialogDescription>
-              System-generated compliance issue detected on {selectedIssue?.date_created ? new Date(selectedIssue.date_created).toLocaleDateString() : 'Unknown date'}.
+              System-generated compliance issue detected on {formatDate(selectedIssue?.date_created) || 'Unknown date'}.
             </DialogDescription>
           </DialogHeader>
 
@@ -2317,8 +2748,8 @@ ${context}`
                       <div className="text-sm text-gray-600">
                         <p><strong>Action taken:</strong> {selectedAction}</p>
                         {resolutionNotes && <p><strong>Notes:</strong> {resolutionNotes}</p>}
-                        <p><strong>Resolved by:</strong> Current User</p>
-                        <p><strong>Resolved on:</strong> {new Date().toLocaleString()}</p>
+                        <p><strong>Resolved by:</strong> {currentUser?.displayName || currentUser?.email || 'Current User'}</p>
+                        <p><strong>Resolved on:</strong> {formatDate(new Date().toISOString())}</p>
                       </div>
                     </div>
                   </div>

@@ -116,6 +116,51 @@ UPDATE public.roles SET member_count = (
     END
 );
 
+-- Create ai_insights table for storing generated AI insights
+CREATE TABLE IF NOT EXISTS public.ai_insights (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    firebase_uid TEXT REFERENCES public.users(firebase_uid),
+    dashboard_type TEXT NOT NULL DEFAULT 'operational',
+    executive_summary TEXT,
+    high_priority_recommendations TEXT[],
+    medium_priority_actions TEXT[],
+    strategic_opportunities TEXT[],
+    impact_data JSONB,
+    insights_count INTEGER DEFAULT 0,
+    generation_type TEXT DEFAULT 'manual',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes for ai_insights table
+CREATE INDEX IF NOT EXISTS idx_ai_insights_firebase_uid ON public.ai_insights(firebase_uid);
+CREATE INDEX IF NOT EXISTS idx_ai_insights_dashboard_type ON public.ai_insights(dashboard_type);
+CREATE INDEX IF NOT EXISTS idx_ai_insights_created_at ON public.ai_insights(created_at);
+
+-- Enable Row Level Security (RLS) for ai_insights
+ALTER TABLE public.ai_insights ENABLE ROW LEVEL SECURITY;
+
+-- Create RLS policies for ai_insights
+CREATE POLICY "Users can view their own AI insights" ON public.ai_insights
+    FOR SELECT USING (auth.role() = 'authenticated' AND firebase_uid = auth.uid());
+
+CREATE POLICY "Users can insert their own AI insights" ON public.ai_insights
+    FOR INSERT WITH CHECK (auth.role() = 'authenticated' AND firebase_uid = auth.uid());
+
+CREATE POLICY "Users can update their own AI insights" ON public.ai_insights
+    FOR UPDATE USING (auth.role() = 'authenticated' AND firebase_uid = auth.uid());
+
+-- Data team leads can view all AI insights
+CREATE POLICY "Data team leads can view all AI insights" ON public.ai_insights
+    FOR SELECT USING (
+        auth.role() = 'authenticated' AND 
+        EXISTS (
+            SELECT 1 FROM public.users 
+            WHERE firebase_uid = auth.uid() 
+            AND role = 'dataTeamLead'
+        )
+    );
+
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.team_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;

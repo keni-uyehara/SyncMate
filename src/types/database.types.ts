@@ -277,6 +277,59 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_insights: {
+        Row: {
+          id: string
+          firebase_uid: string | null
+          dashboard_type: string
+          executive_summary: string | null
+          high_priority_recommendations: string[] | null
+          medium_priority_actions: string[] | null
+          strategic_opportunities: string[] | null
+          impact_data: Json | null
+          insights_count: number
+          generation_type: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          firebase_uid?: string | null
+          dashboard_type?: string
+          executive_summary?: string | null
+          high_priority_recommendations?: string[] | null
+          medium_priority_actions?: string[] | null
+          strategic_opportunities?: string[] | null
+          impact_data?: Json | null
+          insights_count?: number
+          generation_type?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          firebase_uid?: string | null
+          dashboard_type?: string
+          executive_summary?: string | null
+          high_priority_recommendations?: string[] | null
+          medium_priority_actions?: string[] | null
+          strategic_opportunities?: string[] | null
+          impact_data?: Json | null
+          insights_count?: number
+          generation_type?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_insights_firebase_uid_fkey"
+            columns: ["firebase_uid"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["firebase_uid"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
