@@ -2,26 +2,26 @@ import React from 'react'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertTriangle, LogOut } from "lucide-react"
-import { useNavigate } from "react-router-dom"
 import { signOut } from "firebase/auth"
 import { auth } from "./firebaseConfig"
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000"
 
 export default function NotAuthorized() {
-  const navigate = useNavigate()
-
   const handleLogout = async () => {
     try {
+      // Clear backend cookie/session
       await fetch(`${API_BASE}/logout`, {
         method: "POST",
         credentials: "include",
       })
+      // Sign out from Firebase
       await signOut(auth)
-      navigate("/login", { replace: true })
     } catch (error) {
       console.error("Logout error:", error)
-      navigate("/login", { replace: true })
+    } finally {
+      // Force full reload so auth/cookie state is guaranteed reset
+      window.location.href = "/login"
     }
   }
 

@@ -1,13 +1,17 @@
-"use client"
+// team-lead-compliance-dashboard.tsx
+// React + Express version (not Next.js)
+// If you use path aliases like "@/components", keep your tsconfig/vite config accordingly.
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Progress } from "@/components/ui/progress"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import React, { useCallback, useRef, useState } from "react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertTriangle,
   Clock,
@@ -25,13 +29,42 @@ import {
   XCircle,
   AlertCircle,
   Lightbulb,
-  LogOut
-} from "lucide-react"
-import { DashboardHeader } from "../../components/ui/dashboard-header"
-import { doLogout } from "@/utils/logout"; // <-- add this import
+  LogOut,
+} from "lucide-react";
+import { DashboardHeader } from "../../components/ui/dashboard-header";
+import { doLogout } from "@/utils/logout";
+import DropZone from "@/components/DropZone";
+
+// Change this if your API base is different
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
+
+type ReportStatus = "Processing" | "Processed" | "Completed";
+
+type RecentReport = {
+  id: string;
+  name: string;
+  entity: string;
+  uploadedBy: string;
+  uploadDate: string;
+  status: ReportStatus;
+  issues: number;
+};
 
 export default function TeamLeadDashboard() {
-  const recentReports = [
+  // ---------- FORM STATE ----------
+  const [entity, setEntity] = useState("");
+  const [reportType, setReportType] = useState("");
+  const [period, setPeriod] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+
+  // ---------- UI STATE ----------
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ---------- TABLE STATE ----------
+  const [recentReports, setRecentReports] = useState<RecentReport[]>([
     {
       id: "RPT-001",
       name: "Weekly Compliance Summary",
@@ -59,33 +92,148 @@ export default function TeamLeadDashboard() {
       status: "Completed",
       issues: 1,
     },
-  ]
+  ]);
+
+  // ---------- HELPERS ----------
+  const entityLabel = (value: string) => {
+    switch (value) {
+      case "bpi-ayala-land":
+        return "BPI x Ayala Land";
+      case "bpi-globe":
+        return "BPI x Globe";
+      case "bpi-ac-energy":
+        return "BPI x AC Energy";
+      case "bpi-ac-health":
+        return "BPI x AC Health";
+      default:
+        return value || "";
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Completed":
-        return "bg-green-100 text-green-800"
+        return "bg-green-100 text-green-800";
       case "Processed":
-        return "bg-blue-100 text-blue-800"
+        return "bg-blue-100 text-blue-800";
       case "Processing":
-        return "bg-yellow-100 text-yellow-800"
+        return "bg-yellow-100 text-yellow-800";
       default:
-        return "bg-gray-100 text-gray-800"
+        return "bg-gray-100 text-gray-800";
     }
-  }
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "Completed":
-        return <CheckCircle className="w-4 h-4 text-green-500" />
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
       case "Processed":
-        return <Activity className="w-4 h-4 text-blue-500" />
+        return <Activity className="w-4 h-4 text-blue-500" />;
       case "Processing":
-        return <Clock className="w-4 h-4 text-yellow-500" />
+        return <Clock className="w-4 h-4 text-yellow-500" />;
       default:
-        return <AlertCircle className="w-4 h-4 text-gray-500" />
+        return <AlertCircle className="w-4 h-4 text-gray-500" />;
     }
-  }
+  };
+
+  const openFileDialog = () => fileInputRef.current?.click();
+
+  const onPickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) setFile(f);
+  };
+
+  const validate = () => {
+    if (!entity) return "Please select an entity partnership.";
+    if (!reportType) return "Please select a report type.";
+    if (!period) return "Please choose a reporting period.";
+    if (!file) return "Please attach a report file.";
+
+    const allowed = [
+      "text/csv",
+      "application/pdf",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ];
+    if (file && !allowed.includes(file.type)) {
+      return "Unsupported file type. Use CSV, Excel, or PDF.";
+    }
+    if (file && file.size > 50 * 1024 * 1024) {
+      return "File too large. Maximum is 50MB.";
+    }
+    return null;
+  };
+
+  // cosmetic fake progress while fetch runs (no xhr in fetch for real progress)
+  const kickFakeProgress = useCallback(() => {
+    setProgress(10);
+    const id = setInterval(() => {
+      setProgress((p) => {
+        if (p >= 95) {
+          clearInterval(id);
+          return 95;
+        }
+        return Math.min(p + Math.random() * 18, 95);
+      });
+    }, 300);
+    return () => clearInterval(id);
+  }, []);
+
+  const handleUpload = async () => {
+    const err = validate();
+    if (err) {
+      alert(err);
+      return;
+    }
+    if (!file) return;
+
+    setUploading(true);
+    const clear = kickFakeProgress();
+
+    try {
+      const fd = new FormData();
+      fd.append("entity", entity);
+      fd.append("reportType", reportType);
+      fd.append("period", period);
+      fd.append("file", file);
+
+      const res = await fetch(`${API_BASE}/api/reports/upload`, {
+        method: "POST",
+        body: fd,
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`Upload failed (${res.status}) ${txt}`);
+      }
+
+      const data = await res.json();
+
+      setProgress(100);
+
+      // Reflect in the table
+      const newRow: RecentReport = {
+        id: data.reportId ?? `RPT-${Math.floor(Math.random() * 900 + 100)}`,
+        name: data.reportName ?? file.name,
+        entity: data.entityLabel ?? entityLabel(entity),
+        uploadedBy: data.uploadedBy ?? "You",
+        uploadDate: new Date().toISOString().slice(0, 16).replace("T", " "),
+        status: "Processing",
+        issues: 0,
+      };
+      setRecentReports((prev) => [newRow, ...prev]);
+
+      // Reset just the file; keep other form selections
+      setFile(null);
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message || "Upload failed.");
+    } finally {
+      clear();
+      setUploading(false);
+      setTimeout(() => setProgress(0), 700);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -93,26 +241,14 @@ export default function TeamLeadDashboard() {
       <DashboardHeader
         title="Compliance Dashboard"
         actions={[
-          {
-            label: "Export Insights",
-            icon: Download,
-            variant: "outline"
-          },
-          {
-            label: "Generate Report",
-            icon: Lightbulb
-          },
-          {
-            label: "Logout",
-            icon: LogOut,
-            variant: "outline",
-            onClick: () => doLogout(), // <-- add this action
-          },
+          { label: "Export Insights", icon: Download, variant: "outline" },
+          { label: "Generate Report", icon: Lightbulb },
+          { label: "Logout", icon: LogOut, variant: "outline", onClick: () => doLogout() },
         ]}
       />
 
       <div className="p-6">
-        {/* Key Metrics Cards - Read Only */}
+        {/* Key Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -163,7 +299,7 @@ export default function TeamLeadDashboard() {
           </Card>
         </div>
 
-        {/* Main Content Tabs - Simplified for Team Leads */}
+        {/* Tabs */}
         <Tabs defaultValue="reports" className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="reports">Report Management</TabsTrigger>
@@ -172,9 +308,8 @@ export default function TeamLeadDashboard() {
             <TabsTrigger value="team">Team Overview</TabsTrigger>
           </TabsList>
 
-          {/* Report Management Tab */}
+          {/* Report Management */}
           <TabsContent value="reports" className="space-y-6">
-            {/* Report Upload Section */}
             <Card>
               <CardHeader>
                 <CardTitle>Import New Report</CardTitle>
@@ -182,10 +317,11 @@ export default function TeamLeadDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Left: Form controls */}
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm font-medium mb-2 block">Entity Partnership</label>
-                      <Select>
+                      <Select value={entity} onValueChange={setEntity}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select entity partnership" />
                         </SelectTrigger>
@@ -200,7 +336,7 @@ export default function TeamLeadDashboard() {
 
                     <div>
                       <label className="text-sm font-medium mb-2 block">Report Type</label>
-                      <Select>
+                      <Select value={reportType} onValueChange={setReportType}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select report type" />
                         </SelectTrigger>
@@ -215,21 +351,61 @@ export default function TeamLeadDashboard() {
 
                     <div>
                       <label className="text-sm font-medium mb-2 block">Reporting Period</label>
-                      <Input type="date" />
+                      <Input type="date" value={period} onChange={(e) => setPeriod(e.target.value)} />
                     </div>
 
-                    <Button className="w-full">
-                      <Upload className="w-4 h-4 mr-2" />
-                      Upload Report File
-                    </Button>
+                    {/* Hidden file input */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      accept=".csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf"
+                      onChange={onPickFile}
+                    />
+
+                    <div className="space-y-3">
+                      <Button type="button" variant="outline" className="w-full" onClick={openFileDialog}>
+                        <Upload className="w-4 h-4 mr-2" />
+                        {file ? `Selected: ${file.name}` : "Choose Report File"}
+                      </Button>
+
+                      <Button className="w-full" disabled={uploading} onClick={handleUpload}>
+                        {uploading ? (
+                          <>
+                            <Upload className="w-4 h-4 mr-2 animate-pulse" />
+                            Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4 mr-2" />
+                            Upload Report
+                          </>
+                        )}
+                      </Button>
+
+                      {uploading || progress > 0 ? <Progress value={progress} /> : null}
+                    </div>
                   </div>
 
-                  <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center">
-                    <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 mb-2">Drag and drop your report file here</p>
-                    <p className="text-sm text-gray-500">Supports CSV, Excel, PDF formats</p>
-                    <p className="text-xs text-gray-400 mt-2">Maximum file size: 50MB</p>
+                  {/* Right: Drag & drop area (single tile) */}
+                  <div className="p-2">
+                                      <DropZone
+                    multiple={false} // if you only want one file
+                    onFilesSelected={(files) => setFile(files[0] ?? null)}
+                    label={
+                      file ? (
+                        <>
+                          <span className="font-medium">{file.name}</span>
+                          <div className="text-sm text-gray-500 mt-1">Ready to upload</div>
+                        </>
+                      ) : (
+                        "Drag and drop your report file here"
+                      )
+                    }
+                  />
+
                   </div>
+
                 </div>
               </CardContent>
             </Card>
@@ -265,9 +441,7 @@ export default function TeamLeadDashboard() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {getStatusIcon(report.status)}
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(report.status)}`}
-                            >
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(report.status)}`}>
                               {report.status}
                             </span>
                           </div>
@@ -280,7 +454,7 @@ export default function TeamLeadDashboard() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" title="View">
                             <Eye className="w-4 h-4" />
                           </Button>
                         </TableCell>
@@ -292,10 +466,9 @@ export default function TeamLeadDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Issue Monitoring Tab */}
+          {/* Issue Monitoring */}
           <TabsContent value="monitoring" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Issue Summary Cards */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -375,7 +548,7 @@ export default function TeamLeadDashboard() {
               </Card>
             </div>
 
-            {/* Entity Health Overview */}
+            {/* Entity health overview */}
             <Card>
               <CardHeader>
                 <CardTitle>Entity Partnership Health</CardTitle>
@@ -461,10 +634,9 @@ export default function TeamLeadDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Weekly Summaries Tab */}
+          {/* Weekly Summaries */}
           <TabsContent value="summaries" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Current Week Summary */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -520,7 +692,6 @@ export default function TeamLeadDashboard() {
                 </CardContent>
               </Card>
 
-              {/* Trend Analysis */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -575,7 +746,6 @@ export default function TeamLeadDashboard() {
               </Card>
             </div>
 
-            {/* Historical Summaries */}
             <Card>
               <CardHeader>
                 <CardTitle>Previous Week Summaries</CardTitle>
@@ -583,53 +753,32 @@ export default function TeamLeadDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Calendar className="w-5 h-5 text-gray-500" />
-                      <div>
-                        <div className="font-medium">January 8-14, 2024</div>
-                        <div className="text-sm text-gray-600">10 reports • 12 issues resolved • 89% efficiency</div>
+                  {[
+                    ["January 8-14, 2024", "10 reports • 12 issues resolved • 89% efficiency"],
+                    ["January 1-7, 2024", "8 reports • 9 issues resolved • 85% efficiency"],
+                    ["December 25-31, 2023", "6 reports • 7 issues resolved • 82% efficiency"],
+                  ].map(([range, sub]) => (
+                    <div key={range} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <Calendar className="w-5 h-5 text-gray-500" />
+                        <div>
+                          <div className="font-medium">{range}</div>
+                          <div className="text-sm text-gray-600">{sub}</div>
+                        </div>
                       </div>
+                      <Button variant="ghost" size="sm">
+                        <Eye className="w-4 h-4" />
+                      </Button>
                     </div>
-                    <Button variant="ghost" size="sm">
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Calendar className="w-5 h-5 text-gray-500" />
-                      <div>
-                        <div className="font-medium">January 1-7, 2024</div>
-                        <div className="text-sm text-gray-600">8 reports • 9 issues resolved • 85% efficiency</div>
-                      </div>
-                    </div>
-                    <Button variant="ghost" size="sm">
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Calendar className="w-5 h-5 text-gray-500" />
-                      <div>
-                        <div className="font-medium">December 25-31, 2023</div>
-                        <div className="text-sm text-gray-600">6 reports • 7 issues resolved • 82% efficiency</div>
-                      </div>
-                    </div>
-                    <Button variant="ghost" size="sm">
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                  </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Team Overview Tab */}
+          {/* Team Overview */}
           <TabsContent value="team" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Team Performance */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -691,7 +840,6 @@ export default function TeamLeadDashboard() {
                 </CardContent>
               </Card>
 
-              {/* Workload Distribution */}
               <Card>
                 <CardHeader>
                   <CardTitle>Workload Distribution</CardTitle>
@@ -740,7 +888,6 @@ export default function TeamLeadDashboard() {
               </Card>
             </div>
 
-            {/* Recent Activity */}
             <Card>
               <CardHeader>
                 <CardTitle>Recent Team Activity</CardTitle>
@@ -817,5 +964,5 @@ export default function TeamLeadDashboard() {
         </Tabs>
       </div>
     </div>
-  )
+  );
 }
