@@ -11,9 +11,8 @@ import {
   Clock,
   ArrowRight,
   Activity,
-  BarChart3,
   Target,
-  FileText,
+  
 } from "lucide-react"
 import DataTeamPortalNavigation from "./data-team-portal-navigation"
 

@@ -1,4 +1,4 @@
-import React from 'react'
+// React import removed; not needed with react-jsx runtime
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertTriangle, LogOut } from "lucide-react"

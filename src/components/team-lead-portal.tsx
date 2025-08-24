@@ -24,7 +24,7 @@ export default function TeamLeadPortal() {
 
   // If a dashboard is selected, render the navigation component
   if (selectedDashboard) {
-    return <TeamLeadPortalNavigation initialView={selectedDashboard} onBack={() => setSelectedDashboard(null)} />
+    return <TeamLeadPortalNavigation initialView={selectedDashboard} />
   }
 
   // Landing page with dashboard selection
