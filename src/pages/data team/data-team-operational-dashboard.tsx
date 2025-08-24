@@ -16,6 +16,7 @@ import { SearchFilterBar } from "@/components/ui/search-filter-bar"
 import { ActionDropdown } from "@/components/ui/action-dropdown"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ComplianceCharts } from "@/components/ui/compliance-charts"
+import { Pagination } from "@/components/ui/pagination"
 import { supabase } from "@/supabaseClient"
 import type { Database } from "@/types/database.types"
 import { doLogout } from "@/utils/logout"
@@ -239,6 +240,43 @@ export default function DataTeamOperationalDashboard() {
           setComplianceIssues([])
         } else {
           setComplianceIssues(data || [])
+          
+          // Create audit trail entries for newly loaded issues
+          if (data && data.length > 0) {
+            for (const issue of data) {
+              // Create audit entry for issue creation (if it's a new issue)
+              if (issue.date_created) {
+                const createdDate = new Date(issue.date_created)
+                const now = new Date()
+                const hoursSinceCreated = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60)
+                
+                // Only create audit entry if issue was created in the last 24 hours
+                if (hoursSinceCreated <= 24) {
+                  await createAuditEntry('issue_created', {
+                    issue_id: issue.issue_id,
+                    issue_type: issue.issue_type,
+                    entity: issue.entity,
+                    severity: issue.severity,
+                    description: `System detected ${issue.issue_type} issue for ${issue.entity}`
+                  })
+                }
+              }
+              
+              // Create audit entry for status updates
+              if (issue.status === 'In Progress' && currentUser?.uid === issue.assignee) {
+                await createAuditEntry('issue_status_updated', {
+                  issue_id: issue.issue_id,
+                  issue_type: issue.issue_type,
+                  entity: issue.entity,
+                  old_status: 'Open',
+                  new_status: 'In Progress',
+                  updated_by: currentUser?.displayName || currentUser?.email || 'Unknown User',
+                  severity: issue.severity,
+                  description: `Issue status changed to In Progress by ${currentUser?.displayName || currentUser?.email}`
+                })
+              }
+            }
+          }
         }
       } catch (error) {
         console.error("Error fetching data:", error)
@@ -977,6 +1015,17 @@ ${context}`
     setIsDialogOpen(true)
     await loadOrGenerateInsights(issue)
     
+    // Create audit trail entry for viewing issue details
+    await createAuditEntry('issue_comment_added', {
+      issue_id: issue.issue_id,
+      issue_type: issue.issue_type,
+      entity: issue.entity,
+      comment_by: currentUser?.displayName || currentUser?.email || 'Unknown User',
+      comment_text: `Viewed auto-detection details and insights for ${issue.issue_type} issue`,
+      severity: issue.severity,
+      description: `${currentUser?.displayName || currentUser?.email} viewed detailed analysis for ${issue.issue_id}`
+    })
+    
     // Update user's last_login_at timestamp when viewing details
     if (currentUser?.uid) {
       const { error: userError } = await supabase
@@ -1001,6 +1050,18 @@ ${context}`
     setResolutionStatus('pending')
     setIsResolutionDialogOpen(true)
     
+    // Create audit trail entry for starting issue resolution
+    await createAuditEntry('issue_status_updated', {
+      issue_id: issue.issue_id,
+      issue_type: issue.issue_type,
+      entity: issue.entity,
+      old_status: issue.status || 'Open',
+      new_status: 'In Progress',
+      updated_by: currentUser?.displayName || currentUser?.email || 'Unknown User',
+      severity: issue.severity,
+      description: `${currentUser?.displayName || currentUser?.email} started resolution process for ${issue.issue_id}`
+    })
+    
     // Update user's last_login_at timestamp when starting resolution
     if (currentUser?.uid) {
       const { error: userError } = await supabase
@@ -1013,6 +1074,59 @@ ${context}`
       if (userError) {
         console.error('Error updating user activity:', userError)
       }
+    }
+  }
+
+  const handleDismissIssue = async (issue: ComplianceIssue) => {
+    try {
+      // Update issue status to dismissed
+      const { error } = await supabase
+        .from('compliance_issues')
+        .update({ 
+          status: 'Closed',
+          date_resolved: new Date().toISOString(),
+          resolution_notes: 'Issue dismissed by user'
+        })
+        .eq('issue_id', issue.issue_id)
+
+      if (error) {
+        console.error('Error dismissing issue:', error)
+        return
+      }
+
+      // Create audit trail entry for dismissing issue
+      await createAuditEntry('issue_resolved', {
+        issue_id: issue.issue_id,
+        issue_type: issue.issue_type,
+        entity: issue.entity,
+        resolved_by: currentUser?.displayName || currentUser?.email || 'Unknown User',
+        resolution_notes: 'Issue dismissed as not requiring action',
+        severity: issue.severity,
+        description: `${currentUser?.displayName || currentUser?.email} dismissed ${issue.issue_id} as not requiring action`
+      })
+
+      // Refresh the issues list
+      const from = (currentPage - 1) * rowsPerPage
+      const to = from + rowsPerPage - 1
+      
+      let refreshQuery = supabase
+        .from("compliance_issues")
+        .select("*")
+        .order("issue_id", { ascending: true })
+
+      if (currentUserRole !== 'dataTeamLead' && currentUserRole !== 'teamLead' && currentUser?.uid) {
+        refreshQuery = refreshQuery.eq('assignee', currentUser.uid)
+      }
+      
+      const { data, error: refreshError } = await refreshQuery.range(from, to)
+      
+      if (refreshError) {
+        console.error('Error refreshing issues:', refreshError)
+      } else if (data) {
+        setComplianceIssues(data)
+      }
+    } catch (error) {
+      console.error('Error dismissing issue:', error)
     }
   }
 
@@ -1128,6 +1242,17 @@ ${context}`
       }
       
       console.log('Successfully updated issue:', updateResult)
+      
+      // Create audit trail entry for issue resolution
+      await createAuditEntry('issue_resolved', {
+        issue_id: resolutionIssue.issue_id,
+        issue_type: resolutionIssue.issue_type,
+        entity: resolutionIssue.entity,
+        resolved_by: currentUser?.displayName || currentUser?.email || 'Unknown User',
+        resolution_notes: resolutionNotes,
+        severity: resolutionIssue.severity,
+        description: `Issue resolved by ${currentUser?.displayName || currentUser?.email} with action: ${selectedAction}`
+      })
       
       setResolutionStatus('Closed')
       setResolutionStep('complete')
@@ -1450,11 +1575,10 @@ ${context}`
 
         {/* Main Content Tabs */}
         <Tabs defaultValue="issue-tracking" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="issue-tracking">Issue Tracking</TabsTrigger>
             <TabsTrigger value="resolution-workflows">Resolution Workflows</TabsTrigger>
             <TabsTrigger value="root-cause-analysis">Root Cause Analysis</TabsTrigger>
-            <TabsTrigger value="audit-trail">Audit Trail</TabsTrigger>
             <TabsTrigger value="ai-insights">AI Insights</TabsTrigger>
             <TabsTrigger value="data-glossary">Data Glossary</TabsTrigger>
           </TabsList>
@@ -1547,7 +1671,7 @@ ${context}`
                                     {
                                       label: "Dismiss Issue",
                                       icon: X,
-                                      onClick: () => console.log(`Dismiss issue ${issue.issue_id}`),
+                                      onClick: () => handleDismissIssue(issue),
                                       variant: "destructive"
                                     }
                                   ]}
@@ -1559,75 +1683,15 @@ ${context}`
                       </TableBody>
                     </Table>
 
-                    {/* Enhanced Pagination */}
-                    {totalCount > 0 && (
-                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-6 border-t border-gray-200">
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <span className="font-medium">Results</span>
-                          <span className="text-gray-400">•</span>
-                          <span>
-                            Showing <span className="font-semibold text-gray-900">{startItem}</span> to{' '}
-                            <span className="font-semibold text-gray-900">{endItem}</span> of{' '}
-                            <span className="font-semibold text-gray-900">{totalCount.toLocaleString()}</span>
-                          </span>
-                        </div>
-                        
-                        <div className="flex items-center gap-1">
-                          {/* Previous Button */}
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            disabled={currentPage === 1}
-                            onClick={() => handlePageChange(currentPage - 1)}
-                            className="h-8 px-3 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                          >
-                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                            </svg>
-                            Previous
-                          </Button>
-                          
-                          {/* Page Numbers */}
-                          <div className="flex items-center gap-1 mx-2">
-                            {getPageNumbers().map((page, index) => (
-                              page === '...' ? (
-                                <span key={`ellipsis-${index}`} className="px-2 py-1 text-gray-400">
-                                  •••
-                                </span>
-                              ) : (
-                                <Button
-                                  key={page}
-                                  variant={currentPage === page ? "default" : "outline"}
-                                  size="sm"
-                                  onClick={() => handlePageChange(page as number)}
-                                  className={`h-8 w-8 p-0 text-sm font-medium ${
-                                    currentPage === page 
-                                      ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700' 
-                                      : 'text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
-                                  }`}
-                                >
-                                  {page}
-                                </Button>
-                              )
-                            ))}
-                          </div>
-                          
-                          {/* Next Button */}
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            disabled={currentPage === totalPages || totalPages === 0}
-                            onClick={() => handlePageChange(currentPage + 1)}
-                            className="h-8 px-3 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                          >
-                            Next
-                            <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </Button>
-                        </div>
-                      </div>
-                    )}
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      totalCount={totalCount}
+                      startItem={startItem}
+                      endItem={endItem}
+                      onPageChange={handlePageChange}
+                      getPageNumbers={getPageNumbers}
+                    />
                   </>
                 )}
               </CardContent>
@@ -1996,94 +2060,6 @@ ${context}`
                   </div>
                 ))}
               </CardContent>
-            </Card>
-          </TabsContent>
-          
-          {/* Audit Trail Tab */}
-          <TabsContent value="audit-trail" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Audit Trail</CardTitle>
-                <CardDescription>
-                  Complete history of compliance actions and changes
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Entry 1 */}
-                <div className="flex justify-between p-4 border rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <div className="w-3 h-3 bg-green-500 rounded-full mt-1"></div>
-                    <div>
-                      <p className="font-medium text-sm">
-                        Issue COMP-003 Resolved
-                      </p>
-                      <p className="text-xs text-gray-600">
-                        Ana Reyes updated credit scoring threshold for AC Energy green loans
-                      </p>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        <Badge variant="outline">Threshold Update</Badge>
-                        <Badge variant="outline">BPI x AC Energy</Badge>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 whitespace-nowrap">2 Hours ago</p>
-                </div>
-
-                {/* Entry 2 */}
-                <div className="flex justify-between p-4 border rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <div className="w-3 h-3 bg-blue-500 rounded-full mt-1"></div>
-                    <div>
-                      <p className="font-medium text-sm">
-                        Workflow Completed
-                      </p>
-                      <p className="text-xs text-gray-600">
-                        Maria Santos completed field mapping validation for COMP-001
-                      </p>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        <Badge variant="outline">Data Reconciliation</Badge>
-                        <Badge variant="outline">BPI x Ayala Land</Badge>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 whitespace-nowrap">4 Hours ago</p>
-                </div>
-
-                {/* Entry 3 */}
-                <div className="flex justify-between p-4 border rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <div className="w-3 h-3 bg-yellow-500 rounded-full mt-1"></div>
-                    <div>
-                      <p className="font-medium text-sm">
-                        New Issue Flagged
-                      </p>
-                      <p className="text-xs text-gray-600">
-                        System detected SME classification inconsistency between BPI and Globe
-                      </p>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        <Badge variant="outline">Definition Mismatch</Badge>
-                        <Badge variant="outline">BPI x Globe</Badge>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 whitespace-nowrap">6 Hours ago</p>
-                </div>
-              </CardContent>
-              {/* Pagination */}
-              <div className="flex justify-center mt-4 mb-8">
-                <nav className="flex items-center gap-2 text-sm">
-                  <button className="px-2 py-1 text-gray-400 cursor-not-allowed">
-                    ← Previous
-                  </button>
-                  <button className="px-3 py-1 bg-black text-white rounded">1</button>
-                  <button className="px-3 py-1 border rounded">2</button>
-                  <button className="px-3 py-1 border rounded">3</button>
-                  <span>…</span>
-                  <button className="px-3 py-1 border rounded">67</button>
-                  <button className="px-3 py-1 border rounded">68</button>
-                  <button className="px-2 py-1">Next →</button>
-                </nav>
-              </div>
             </Card>
           </TabsContent>
 
