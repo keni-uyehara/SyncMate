@@ -73,7 +73,7 @@ export default function DataTeamLeadDashboard() {
   const [newMember, setNewMember] = useState({
     name: "",
     email: "",
-    role: "data_analyst" as TeamMember['role']
+    role: "dataTeam" as Database['public']['Tables']['users']['Row']['role']
   })
   const [newUser, setNewUser] = useState({
     email: "",
@@ -342,27 +342,26 @@ export default function DataTeamLeadDashboard() {
 
   // Team member creation removed - using users table instead
 
-  const handleUpdateMemberRole = async (memberId: string, newRole: TeamMember['role']) => {
+  const handleUpdateMemberRole = async (memberId: string, newRole: Database['public']['Tables']['users']['Row']['role']) => {
     try {
       const { error } = await supabase
-        .from('team_members')
+        .from('users')
         .update({ role: newRole })
-        .eq('id', memberId)
+        .eq('firebase_uid', memberId)
 
       if (error) {
         console.error('Error updating member role:', error)
         return
       }
 
-      setTeamMembers(members => 
-        members.map(member => 
-          member.id === memberId 
+      setUsers(users => 
+        users.map(user => 
+          user.firebase_uid === memberId 
             ? { 
-                ...member, 
-                role: newRole, 
-                permissions: getPermissionsForRole(newRole)
+                ...user, 
+                role: newRole
               }
-            : member
+            : user
         )
       )
     } catch (error) {
@@ -371,35 +370,12 @@ export default function DataTeamLeadDashboard() {
   }
 
   const handleToggleMemberStatus = async (memberId: string) => {
-    try {
-      const member = teamMembers.find(m => m.id === memberId)
-      if (!member) return
-
-      const newStatus = member.status === 'active' ? 'inactive' : 'active'
-      
-      const { error } = await supabase
-        .from('team_members')
-        .update({ status: newStatus })
-        .eq('id', memberId)
-
-      if (error) {
-        console.error('Error updating member status:', error)
-        return
-      }
-
-      setTeamMembers(members =>
-        members.map(member =>
-          member.id === memberId
-            ? { ...member, status: newStatus }
-            : member
-        )
-      )
-    } catch (error) {
-      console.error('Error updating member status:', error)
-    }
+    // Note: Users table doesn't have a status field, so this function is deprecated
+    // Keeping it for backward compatibility but it won't perform any action
+    console.log('Status toggle not available for users table')
   }
 
-  const getRoleDisplayName = (role: TeamMember['role']) => {
+  const getRoleDisplayName = (role: Database['public']['Tables']['users']['Row']['role']) => {
     switch (role) {
       case 'dataTeam': return 'Data Team'
       case 'teamLead': return 'Team Lead'
@@ -408,7 +384,7 @@ export default function DataTeamLeadDashboard() {
     }
   }
 
-  const getStatusColor = (status: TeamMember['status']) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-800'
       case 'inactive': return 'bg-red-100 text-red-800'
@@ -768,7 +744,7 @@ export default function DataTeamLeadDashboard() {
       case 'user_added':
         return {
           title: 'New User Added',
-          description: `${metadata.user_name} (${metadata.user_email}) added to system as ${metadata.user_role}`,
+          description: `${metadata.user_name || 'Unknown User'} (${metadata.user_email}) added to system as ${metadata.user_role}`,
           color: 'bg-blue-500',
           tags: ['User Management', metadata.user_role],
           timeAgo
@@ -776,7 +752,7 @@ export default function DataTeamLeadDashboard() {
       case 'user_role_updated':
         return {
           title: 'User Role Updated',
-          description: `${metadata.user_name} role changed from ${metadata.old_role} to ${metadata.new_role}`,
+          description: `${metadata.user_name || 'Unknown User'} role changed from ${metadata.old_role} to ${metadata.new_role}`,
           color: 'bg-yellow-500',
           tags: ['Role Update', metadata.new_role],
           timeAgo
@@ -784,7 +760,7 @@ export default function DataTeamLeadDashboard() {
       case 'user_deleted':
         return {
           title: 'User Removed',
-          description: `${metadata.user_name} (${metadata.user_email}) removed from system`,
+          description: `${metadata.user_name || 'Unknown User'} (${metadata.user_email}) removed from system`,
           color: 'bg-red-500',
           tags: ['User Management', 'Removal'],
           timeAgo
@@ -1138,9 +1114,10 @@ export default function DataTeamLeadDashboard() {
                             </TableCell>
                             <TableCell>
                               {issue.assignee ? (
-                                users.find(user => user.firebase_uid === issue.assignee)?.name || 
-                                users.find(user => user.firebase_uid === issue.assignee)?.email || 
-                                issue.assignee
+                                (() => {
+                                  const assignedUser = users.find(user => user.firebase_uid === issue.assignee)
+                                  return assignedUser?.name || assignedUser?.email || 'Unknown User'
+                                })()
                               ) : (
                                 <span className="text-gray-500">Unassigned</span>
                               )}
@@ -1554,9 +1531,10 @@ export default function DataTeamLeadDashboard() {
                 <p className="text-sm"><strong>Severity:</strong> {selectedIssue?.severity}</p>
                 <p className="text-sm"><strong>Current Assignee:</strong> {
                   selectedIssue?.assignee ? (
-                    users.find(user => user.firebase_uid === selectedIssue.assignee)?.name || 
-                    users.find(user => user.firebase_uid === selectedIssue.assignee)?.email || 
-                    selectedIssue.assignee
+                    (() => {
+                      const assignedUser = users.find(user => user.firebase_uid === selectedIssue.assignee)
+                      return assignedUser?.name || assignedUser?.email || 'Unknown User'
+                    })()
                   ) : 'Unassigned'
                 }</p>
               </div>
@@ -1576,7 +1554,7 @@ export default function DataTeamLeadDashboard() {
                 <SelectContent>
                   {users.map((user) => (
                     <SelectItem key={user.firebase_uid} value={user.firebase_uid}>
-                      {user.name || user.email} ({user.role})
+                      {user.name || user.email} - {user.role}
                     </SelectItem>
                   ))}
                 </SelectContent>

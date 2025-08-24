@@ -35,6 +35,8 @@ import {
   Loader2,
 } from "lucide-react"
 
+import { Select, SelectTrigger, SelectValue, SelectItem, SelectContent } from "@/components/ui/select"
+
 type ComplianceIssue = Database["public"]["Tables"]["compliance_issues"]["Row"]
 
 interface AutoDetectionDetails {
@@ -63,11 +65,82 @@ export default function DataTeamOperationalDashboard() {
   // Removed unused pipeline loading state
   const rowsPerPage = 5
 
+  // Filter and search state
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedFilter, setSelectedFilter] = useState("all")
+  const [selectedEntity, setSelectedEntity] = useState("all")
+  const [selectedIssueType, setSelectedIssueType] = useState("all")
+
+  // Helper function to get unique entities from compliance issues
+  const getUniqueEntities = (): string[] => {
+    const entities = new Set<string>()
+    complianceIssues.forEach(issue => {
+      if (issue.entity) {
+        entities.add(issue.entity)
+      }
+    })
+    return Array.from(entities).sort()
+  }
+
+  // Helper function to get unique issue types from compliance issues
+  const getUniqueIssueTypes = (): string[] => {
+    const issueTypes = new Set<string>()
+    complianceIssues.forEach(issue => {
+      if (issue.issue_type) {
+        issueTypes.add(issue.issue_type)
+      }
+    })
+    return Array.from(issueTypes).sort()
+  }
+
+  // Helper function to filter compliance issues
+  const getFilteredIssues = (): ComplianceIssue[] => {
+    return complianceIssues.filter(issue => {
+      // Search filter
+      const searchMatch = !searchTerm || 
+        issue.issue_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        issue.issue_type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        issue.entity?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        issue.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        getAssigneeName(issue.assignee).toLowerCase().includes(searchTerm.toLowerCase())
+
+      // Severity/Status filter
+      let filterMatch = true
+      if (selectedFilter !== "all") {
+        if (selectedFilter === "high" || selectedFilter === "medium" || selectedFilter === "low") {
+          filterMatch = issue.severity?.toLowerCase() === selectedFilter
+        } else if (selectedFilter === "in-progress") {
+          filterMatch = issue.status === "In Progress"
+        } else if (selectedFilter === "pending") {
+          filterMatch = issue.status === "Open"
+        } else if (selectedFilter === "resolved") {
+          filterMatch = issue.status === "Closed"
+        }
+      }
+
+      // Entity filter
+      const entityMatch = selectedEntity === "all" || issue.entity === selectedEntity
+
+      // Issue type filter
+      const issueTypeMatch = selectedIssueType === "all" || issue.issue_type === selectedIssueType
+
+      return searchMatch && filterMatch && entityMatch && issueTypeMatch
+    })
+  }
+
   // Helper function to resolve Firebase UID to user name
   const getAssigneeName = (firebaseUid: string | null) => {
     if (!firebaseUid) return 'Unassigned'
     const user = users.find(u => u.firebase_uid === firebaseUid)
-    return user?.name || user?.email || firebaseUid
+    // Prioritize name, then email, and only show UID if neither is available
+    if (user?.name && user.name.trim() !== '') {
+      return user.name
+    }
+    if (user?.email && user.email.trim() !== '') {
+      return user.email
+    }
+    // Only show UID if no name or email is available
+    return firebaseUid
   }
 
   // Helper function to format dates consistently
@@ -289,6 +362,20 @@ export default function DataTeamOperationalDashboard() {
     fetchData()
   }, [currentPage, currentUserRole, currentUser?.uid])
 
+  // Pagination for filtered results
+  const filteredIssues = getFilteredIssues()
+  const filteredTotalPages = Math.ceil(filteredIssues.length / rowsPerPage)
+  const filteredStartItem = filteredIssues.length > 0 ? (currentPage - 1) * rowsPerPage + 1 : 0
+  const filteredEndItem = Math.min(currentPage * rowsPerPage, filteredIssues.length)
+  
+  // Get paginated filtered issues
+  const paginatedFilteredIssues = filteredIssues.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, selectedFilter, selectedEntity, selectedIssueType])
+
   const totalPages = Math.ceil(totalCount / rowsPerPage)
   const startItem = totalCount > 0 ? (currentPage - 1) * rowsPerPage + 1 : 0
   const endItem = Math.min(currentPage * rowsPerPage, totalCount)
@@ -426,6 +513,18 @@ export default function DataTeamOperationalDashboard() {
     }
   }
 
+  // Helper function to clean up recommendation text
+  const cleanRecommendationText = (text: string): string => {
+    return text
+      .replace(/::/g, ': ') // Replace double colons with single colon and space
+      .replace(/:\s*:/g, ': ') // Replace colon followed by whitespace and colon with single colon
+      .replace(/^\s*[-*•]\s*/, '') // Remove leading bullet points
+      .replace(/^\d+\.\s*/, '') // Remove leading numbers
+      .replace(/^\*\*(.*?)\*\*:?\s*/, '$1: ') // Clean up markdown bold formatting
+      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove remaining markdown bold
+      .trim()
+  }
+
   const generateAIRecommendations = async (issue: ComplianceIssue, summarizer: any): Promise<string[]> => {
     try {
       // Create a more focused and structured context for AI recommendations
@@ -444,6 +543,13 @@ export default function DataTeamOperationalDashboard() {
         
         Make each recommendation specific, actionable, and different from the others.
         Avoid generic statements. Be specific to this issue type and entity.
+        
+        IMPORTANT FORMATTING RULES:
+        - Do NOT use double colons (::) anywhere in your recommendations
+        - Use single colons (:) only when necessary for clarity
+        - Write recommendations as clear, complete sentences
+        - Do not use bullet points, numbers, or special formatting characters
+        - Each recommendation should be a standalone, actionable statement
       `
 
       console.log('Generating focused AI recommendations with context:', recommendationContext)
@@ -452,7 +558,10 @@ export default function DataTeamOperationalDashboard() {
       let recommendationsText = ''
       if (summarizer === 'gemini') {
         const recs = await geminiGenerateRecommendations(recommendationContext, 4)
-        if (recs && recs.length > 0) return recs
+        if (recs && recs.length > 0) {
+          // Clean up the recommendations
+          return recs.map(rec => cleanRecommendationText(rec))
+        }
       } else if (typeof summarizer === 'function') {
         const recommendationsResult = await summarizer(recommendationContext, {
           max_length: 250,
@@ -465,11 +574,7 @@ export default function DataTeamOperationalDashboard() {
       // Parse and clean recommendations
       const recommendations = recommendationsText
         .split(/[\n.!?]+/)
-        .map(rec => rec.trim())
-        .map(rec => rec.replace(/^\s*[-*•]\s*/, ''))
-        .map(rec => rec.replace(/^\d+\.\s*/, ''))
-        .map(rec => rec.replace(/^\*\*(.*?)\*\*:?\s*/, '$1: '))
-        .map(rec => rec.replace(/\*\*(.*?)\*\*/g, '$1'))
+        .map(rec => cleanRecommendationText(rec))
         .filter(rec => rec.length > 15 && rec.length < 200)
         .filter(rec => rec.length > 0)
         .slice(0, 4)
@@ -558,26 +663,26 @@ export default function DataTeamOperationalDashboard() {
     const entity = issue.entity || 'the system'
     const severity = issue.severity || 'unknown'
     const description = issue.description || 'No specific description provided'
-    const assignee = issue.assignee || 'Unassigned'
+    const assigneeName = getAssigneeName(issue.assignee)
     const dateCreated = formatDate(issue.date_created) || 'unknown date'
 
     if (issueType.includes('duplicate')) {
-      return `The system has identified duplicate records for ${entity} with issue ID ${issue.issue_id}. This duplication was detected on ${dateCreated} and affects data integrity. The issue is currently assigned to ${assignee} and has a ${severity} severity level. ${description}`
+      return `The system has identified duplicate records for ${entity} with issue ID ${issue.issue_id}. This duplication was detected on ${dateCreated} and affects data integrity. The issue is currently assigned to ${assigneeName} and has a ${severity} severity level. ${description}`
     }
     
     if (issueType.includes('mismatch')) {
-      return `A data definition mismatch has been detected for ${entity} (Issue ID: ${issue.issue_id}). This mismatch was flagged on ${dateCreated} and may cause compliance violations. The issue is assigned to ${assignee} with ${severity} severity. ${description}`
+      return `A data definition mismatch has been detected for ${entity} (Issue ID: ${issue.issue_id}). This mismatch was flagged on ${dateCreated} and may cause compliance violations. The issue is assigned to ${assigneeName} with ${severity} severity. ${description}`
     }
     
     if (issueType.includes('threshold')) {
-      return `Threshold violation detected for ${entity} (Issue ID: ${issue.issue_id}). The current values exceed acceptable limits defined in our compliance framework. This issue was created on ${dateCreated}, assigned to ${assignee}, and has ${severity} severity. ${description}`
+      return `Threshold violation detected for ${entity} (Issue ID: ${issue.issue_id}). The current values exceed acceptable limits defined in our compliance framework. This issue was created on ${dateCreated}, assigned to ${assigneeName}, and has ${severity} severity. ${description}`
     }
     
     if (issueType.includes('policy')) {
-      return `Policy alignment issue identified for ${entity} (Issue ID: ${issue.issue_id}). The current implementation does not fully comply with established governance policies. Created on ${dateCreated}, assigned to ${assignee}, with ${severity} severity. ${description}`
+      return `Policy alignment issue identified for ${entity} (Issue ID: ${issue.issue_id}). The current implementation does not fully comply with established governance policies. Created on ${dateCreated}, assigned to ${assigneeName}, with ${severity} severity. ${description}`
     }
     
-    return `Compliance issue ${issue.issue_id} detected for ${entity} on ${dateCreated}. This issue was flagged during automated monitoring and is currently assigned to ${assignee} with ${severity} severity level. ${description}`
+    return `Compliance issue ${issue.issue_id} detected for ${entity} on ${dateCreated}. This issue was flagged during automated monitoring and is currently assigned to ${assigneeName} with ${severity} severity level. ${description}`
   }
 
   const generateSummary = (issue: ComplianceIssue): string => {
@@ -585,14 +690,14 @@ export default function DataTeamOperationalDashboard() {
     const entity = issue.entity || 'the system'
     const issueId = issue.issue_id
     const issueType = issue.issue_type || 'compliance issue'
-    const assignee = issue.assignee || 'Unassigned'
+    const assigneeName = getAssigneeName(issue.assignee)
     
     if (severity.includes('high')) {
-      return `Critical ${issueType} (${issueId}) requiring immediate attention for ${entity}. Currently assigned to ${assignee} and flagged as high priority.`
+      return `Critical ${issueType} (${issueId}) requiring immediate attention for ${entity}. Currently assigned to ${assigneeName} and flagged as high priority.`
     } else if (severity.includes('low')) {
-      return `Minor ${issueType} (${issueId}) detected for ${entity}. Assigned to ${assignee} with standard priority level.`
+      return `Minor ${issueType} (${issueId}) detected for ${entity}. Assigned to ${assigneeName} with standard priority level.`
     } else {
-      return `Moderate ${issueType} (${issueId}) identified for ${entity}. Assigned to ${assignee} and requires attention within standard timeframe.`
+      return `Moderate ${issueType} (${issueId}) identified for ${entity}. Assigned to ${assigneeName} and requires attention within standard timeframe.`
     }
   }
 
@@ -854,9 +959,9 @@ ${context}`
         const strat = await geminiGenerateRecommendations(`${context}\n\nFocus: strategic opportunities and collaboration synergies.`, 3)
 
         setAiExecutiveSummary(exec || "AI summary unavailable.")
-        setAiHighPriority(high || [])
-        setAiMediumPriority(med || [])
-        setAiStrategicOpportunities(strat || [])
+        setAiHighPriority((high || []).map(rec => cleanRecommendationText(rec)))
+        setAiMediumPriority((med || []).map(rec => cleanRecommendationText(rec)))
+        setAiStrategicOpportunities((strat || []).map(rec => cleanRecommendationText(rec)))
         setAiImpact({
           resolutionTimeReductionPercent: 20,
           complianceScoreImprovementPercent: 10,
@@ -866,12 +971,16 @@ ${context}`
         setAiGeneratedAt(new Date().toLocaleString())
 
         // Store AI insights in Supabase
-        await storeAIInsightsInSupabase(exec || "AI summary unavailable.", high || [], med || [], strat || [], {
-          resolutionTimeReductionPercent: 20,
-          complianceScoreImprovementPercent: 10,
-          synergyScoreDeltaPercent: 8,
-          riskMitigationDeltaPercent: 12,
-        }, issues.length)
+        await storeAIInsightsInSupabase(exec || "AI summary unavailable.", 
+          (high || []).map(rec => cleanRecommendationText(rec)), 
+          (med || []).map(rec => cleanRecommendationText(rec)), 
+          (strat || []).map(rec => cleanRecommendationText(rec)), 
+          {
+            resolutionTimeReductionPercent: 20,
+            complianceScoreImprovementPercent: 10,
+            synergyScoreDeltaPercent: 8,
+            riskMitigationDeltaPercent: 12,
+          }, issues.length)
       }
     } catch (e: any) {
       setAiError(e?.message || "Failed to generate AI insights.")
@@ -1608,6 +1717,33 @@ ${context}`
                       { value: "resolved", label: "Resolved" }
                     ]}
                     filterLabel="Issues"
+                    searchValue={searchTerm}
+                    filterValue={selectedFilter}
+                    onSearchChange={setSearchTerm}
+                    onFilterChange={setSelectedFilter}
+                    additionalFilters={[
+                      {
+                        key: "entity",
+                        label: "Entity",
+                        options: getUniqueEntities().map(entity => ({ value: entity, label: entity })),
+                        value: selectedEntity,
+                        onValueChange: setSelectedEntity
+                      },
+                      {
+                        key: "issueType",
+                        label: "Issue Type",
+                        options: getUniqueIssueTypes().map(issueType => ({ value: issueType, label: issueType })),
+                        value: selectedIssueType,
+                        onValueChange: setSelectedIssueType
+                      }
+                    ]}
+                    onClearAllFilters={() => {
+                      setSearchTerm("")
+                      setSelectedFilter("all")
+                      setSelectedEntity("all")
+                      setSelectedIssueType("all")
+                    }}
+                    showClearButton={true}
                   />
                 </div>
               </CardHeader>
@@ -1618,6 +1754,20 @@ ${context}`
                   </div>
                 ) : (
                   <>
+                    {/* Filter Results Count */}
+                    {(searchTerm || selectedFilter !== "all" || selectedEntity !== "all" || selectedIssueType !== "all") && (
+                      <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                        <p className="text-sm text-blue-700">
+                          Showing {filteredStartItem}-{filteredEndItem} of {filteredIssues.length} filtered issues
+                          {searchTerm && ` matching "${searchTerm}"`}
+                          {selectedFilter !== "all" && ` with ${selectedFilter} filter`}
+                          {selectedEntity !== "all" && ` for ${selectedEntity}`}
+                          {selectedIssueType !== "all" && ` of type ${selectedIssueType}`}
+                          {filteredIssues.length !== complianceIssues.length && ` (from ${complianceIssues.length} total)`}
+                        </p>
+                      </div>
+                    )}
+                    
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1632,14 +1782,17 @@ ${context}`
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {complianceIssues.length === 0 ? (
+                        {getFilteredIssues().length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={8} className="text-center text-gray-500 py-8">
-                              No compliance issues found
+                              {complianceIssues.length === 0 
+                                ? "No compliance issues found" 
+                                : "No issues match the current filters"
+                              }
                             </TableCell>
                           </TableRow>
                         ) : (
-                          complianceIssues.map((issue, index) => (
+                          paginatedFilteredIssues.map((issue, index) => (
                             <TableRow key={`${issue.record_id}-${issue.issue_id}-${index}`}>
                               <TableCell className="font-medium">{issue.issue_id}</TableCell>
                               <TableCell>{issue.issue_type}</TableCell>
@@ -1685,10 +1838,10 @@ ${context}`
 
                     <Pagination
                       currentPage={currentPage}
-                      totalPages={totalPages}
-                      totalCount={totalCount}
-                      startItem={startItem}
-                      endItem={endItem}
+                      totalPages={filteredTotalPages}
+                      totalCount={filteredIssues.length}
+                      startItem={filteredStartItem}
+                      endItem={filteredEndItem}
                       onPageChange={handlePageChange}
                       getPageNumbers={getPageNumbers}
                     />
@@ -2129,7 +2282,7 @@ ${context}`
                       <h4 className="font-semibold text-red-600 mb-2 text-base">High Priority Recommendations</h4>
                       <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
                         {(aiHighPriority.length ? aiHighPriority : []).map((item, idx) => (
-                          <li key={idx}>{item}</li>
+                          <li key={idx}>{cleanRecommendationText(item)}</li>
                         ))}
                       </ul>
                     </div>
@@ -2139,7 +2292,7 @@ ${context}`
                       <h4 className="font-semibold text-yellow-600 mb-2 text-base">Medium Priority Actions</h4>
                       <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
                         {(aiMediumPriority.length ? aiMediumPriority : []).map((item, idx) => (
-                          <li key={idx}>{item}</li>
+                          <li key={idx}>{cleanRecommendationText(item)}</li>
                         ))}
                       </ul>
                     </div>
@@ -2149,7 +2302,7 @@ ${context}`
                       <h4 className="font-semibold text-green-600 mb-2 text-base">Strategic Opportunities</h4>
                       <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
                         {(aiStrategicOpportunities.length ? aiStrategicOpportunities : []).map((item, idx) => (
-                          <li key={idx}>{item}</li>
+                          <li key={idx}>{cleanRecommendationText(item)}</li>
                         ))}
                       </ul>
                     </div>
@@ -2474,50 +2627,6 @@ ${context}`
                     </p>
                   </div>
 
-                  {/* Duplicate Analysis (only show for duplicate issues) */}
-                  {selectedIssue.issue_type?.toLowerCase().includes('duplicate') && (
-                    <div>
-                      <h3 className="font-semibold text-lg mb-3">Duplicate Analysis</h3>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="font-medium">Total Duplicates Found:</span>
-                          <span className="ml-2 text-red-600 font-semibold">275</span>
-                        </div>
-                        <div>
-                          <span className="font-medium">Matching Criteria:</span>
-                          <span className="ml-2 text-gray-700">Same customer_id, email, and phone number</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Sample Duplicates (only show for duplicate issues) */}
-                  {selectedIssue.issue_type?.toLowerCase().includes('duplicate') && (
-                    <div>
-                      <h3 className="font-semibold text-lg mb-3">Sample Duplicates:</h3>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between p-3 border rounded-lg">
-                          <div>
-                            <p className="font-medium">John Smith</p>
-                            <p className="text-sm text-gray-600">john@email.com</p>
-                          </div>
-                          <Badge variant="secondary" className="bg-gray-100 text-gray-700">
-                            3 Duplicates
-                          </Badge>
-                        </div>
-                        <div className="flex items-center justify-between p-3 border rounded-lg">
-                          <div>
-                            <p className="font-medium">Maria Santos</p>
-                            <p className="text-sm text-gray-600">maria.santos@email.com</p>
-                          </div>
-                          <Badge variant="secondary" className="bg-gray-100 text-gray-700">
-                            2 Duplicates
-                          </Badge>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Additional Recommendations */}
                   <div>
                     <h3 className="font-semibold text-lg mb-3">Additional Recommendations</h3>
@@ -2525,7 +2634,7 @@ ${context}`
                       {autoDetectionDetails.recommendations.slice(1).map((recommendation, index) => (
                         <li key={index} className="flex items-start gap-2">
                           <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
-                          <span className="text-gray-700">{recommendation}</span>
+                          <span className="text-gray-700">{cleanRecommendationText(recommendation)}</span>
                         </li>
                       ))}
                     </ul>
