@@ -20,7 +20,7 @@ import { Pagination } from "@/components/ui/pagination"
 import { supabase } from "@/supabaseClient"
 import type { Database } from "@/types/database.types"
 import { doLogout } from "@/utils/logout"
-import { SimpleGlossaryTab } from "@/components/glossary/SimpleGlossaryTab"
+import { EditableGlossaryTab } from "@/components/glossary/EditableGlossaryTab"
 
 import {
   AlertTriangle,
@@ -259,11 +259,11 @@ const [assistantMsgs, setAssistantMsgs] = useState<{ role: "user" | "ai"; text: 
             firebase_uid: user.firebase_uid,
             name: user.name || user.email || 'Unknown User',
             email: user.email || '',
-            role: 'data_analyst' as const,
+            role: 'data_steward' as const,
             status: 'active' as const,
             last_active: user.last_login_at,
             assigned_issues: 0, // Will be calculated from compliance issues
-            performance: 85, // Default performance score
+            performance: 0, // Default performance value
             created_at: user.created_at,
             updated_at: user.last_login_at || user.created_at
           }))
@@ -1467,11 +1467,11 @@ ${context}`
           firebase_uid: user.firebase_uid,
           name: user.name || user.email || 'Unknown User',
           email: user.email || '',
-          role: 'data_analyst' as const,
+          role: 'data_steward' as const,
           status: 'active' as const,
           last_active: user.last_login_at,
           assigned_issues: 0, // Will be calculated from compliance issues
-          performance: 85, // Default performance score
+          performance: 0, // Default performance value
           created_at: user.created_at,
           updated_at: user.last_login_at || user.created_at
         }))
@@ -1604,7 +1604,7 @@ ${context}`
       pendingReviews,
       inProgress,
       totalAssigned: memberIssues.length,
-      performance: teamMember.performance || 85
+      performance: teamMember.performance || 0
     }
   }
 
@@ -1920,11 +1920,11 @@ ${context}`
                                 firebase_uid: user.firebase_uid,
                                 name: user.name || user.email || 'Unknown User',
                                 email: user.email || '',
-                                role: 'data_analyst' as const,
+                                role: 'data_steward' as const,
                                 status: 'active' as const,
                                 last_active: user.last_login_at,
                                 assigned_issues: 0,
-                                performance: 85,
+                                performance: 0, // Default performance value
                                 created_at: user.created_at,
                                 updated_at: user.last_login_at || user.created_at
                               }))
@@ -2094,7 +2094,7 @@ ${context}`
                                 }
                               </p>
                               <p className="text-xs text-gray-500">
-                                Performance: {activity.performance}% • Role: {member.role.replace('_', ' ')}
+                                Role: {member.role.replace('_', ' ')}
                               </p>
                             </div>
                           </div>
@@ -2194,7 +2194,7 @@ ${context}`
             {/* Real Compliance Charts */}
             <ComplianceCharts />
 
-            {/* Entity Collaboration Health */}
+            {/*
             <Card>
               <CardHeader>
                 <CardTitle>Entity Collaboration Health</CardTitle>
@@ -2228,7 +2228,7 @@ ${context}`
                   </div>
                 ))}
               </CardContent>
-            </Card>
+            </Card>*/}
           </TabsContent>
 
 
@@ -2391,7 +2391,7 @@ ${context}`
 
           {/* Data Glossary Tab */}
           <TabsContent value="data-glossary" className="space-y-6">
-            <SimpleGlossaryTab />
+            <EditableGlossaryTab />
           </TabsContent>
         </Tabs>
       </div>
@@ -2493,27 +2493,6 @@ ${context}`
                         </li>
                       ))}
                     </ul>
-                  </div>
-
-                  {/* Risk Assessment */}
-                  <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                    <h3 className="font-semibold text-lg mb-3">Risk Assessment</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="font-medium">Risk Level:</span>
-                        <Badge 
-                          variant={autoDetectionDetails?.riskLevel === 'high' ? 'destructive' : 
-                                 autoDetectionDetails?.riskLevel === 'medium' ? 'default' : 'secondary'}
-                          className="ml-2"
-                        >
-                          {autoDetectionDetails?.riskLevel?.toUpperCase()}
-                        </Badge>
-                      </div>
-                      <div>
-                        <span className="font-medium">Confidence Score:</span>
-                        <span className="ml-2 font-semibold">{autoDetectionDetails?.confidence}%</span>
-                      </div>
-                    </div>
                   </div>
                 </div>
               ) : null}

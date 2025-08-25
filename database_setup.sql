@@ -202,3 +202,120 @@ CREATE POLICY "Roles can be managed by data team leads" ON public.roles
             AND role = 'dataTeamLead'
         )
     );
+
+-- Create the data_glossary table (simplified version without foreign key dependencies)
+create table if not exists public.data_glossary (
+  id serial not null,
+  term character varying(255) not null,
+  definition text not null,
+  source_columns text[] null,
+  data_types text[] null,
+  sample_values text[] null,
+  synonyms text[] null,
+  category character varying(100) null,
+  confidence numeric(3, 2) null,
+  dataset_id character varying(100) not null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  source_file_id uuid null,
+  source_filename text null,
+  constraint data_glossary_pkey primary key (id),
+  constraint unique_term_per_dataset unique (term, dataset_id),
+  constraint data_glossary_confidence_check check (
+    (
+      (confidence >= 0.00)
+      and (confidence <= 1.00)
+    )
+  ),
+  constraint valid_confidence check (
+    (
+      (confidence is null)
+      or (
+        (confidence >= 0.00)
+        and (confidence <= 1.00)
+      )
+    )
+  )
+) TABLESPACE pg_default;
+
+-- Create indexes for better performance
+create index IF not exists idx_data_glossary_dataset on public.data_glossary using btree (dataset_id) TABLESPACE pg_default;
+
+create index IF not exists idx_data_glossary_term on public.data_glossary using btree (term) TABLESPACE pg_default;
+
+create index IF not exists idx_data_glossary_category on public.data_glossary using btree (category) TABLESPACE pg_default;
+
+create index IF not exists idx_data_glossary_confidence on public.data_glossary using btree (confidence) TABLESPACE pg_default;
+
+create index IF not exists idx_data_glossary_created_at on public.data_glossary using btree (created_at) TABLESPACE pg_default;
+
+-- Create full-text search index
+create index IF not exists idx_data_glossary_fts on public.data_glossary using gin (
+  to_tsvector(
+    'english'::regconfig,
+    (((term)::text || ' '::text) || definition)
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists data_glossary_source_file_id_idx on public.data_glossary using btree (source_file_id) TABLESPACE pg_default;
+
+-- Create function to refresh extracted terms count (placeholder - implement as needed)
+CREATE OR REPLACE FUNCTION refresh_extracted_terms_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- This function can be implemented to update counts in other tables
+  -- For now, it's a placeholder
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create function to update dataset term count (placeholder - implement as needed)
+CREATE OR REPLACE FUNCTION update_dataset_term_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- This function can be implemented to update dataset statistics
+  -- For now, it's a placeholder
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create triggers
+create trigger trg_terms_count_del
+after DELETE on data_glossary for EACH row
+execute FUNCTION refresh_extracted_terms_count ();
+
+create trigger trg_terms_count_ins
+after INSERT on data_glossary for EACH row
+execute FUNCTION refresh_extracted_terms_count ();
+
+create trigger trg_terms_count_upd
+after
+update OF source_file_id on data_glossary for EACH row
+execute FUNCTION refresh_extracted_terms_count ();
+
+create trigger trigger_update_dataset_count
+after INSERT
+or DELETE
+or
+update on data_glossary for EACH row
+execute FUNCTION update_dataset_term_count ();
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE public.data_glossary ENABLE ROW LEVEL SECURITY;
+
+-- Create policies for data access
+-- Allow authenticated users to read all glossary terms
+CREATE POLICY "Allow authenticated users to read glossary terms" ON public.data_glossary
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+-- Allow authenticated users to insert glossary terms
+CREATE POLICY "Allow authenticated users to insert glossary terms" ON public.data_glossary
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+-- Allow authenticated users to update glossary terms
+CREATE POLICY "Allow authenticated users to update glossary terms" ON public.data_glossary
+  FOR UPDATE USING (auth.role() = 'authenticated');
+
+-- Allow authenticated users to delete glossary terms
+CREATE POLICY "Allow authenticated users to delete glossary terms" ON public.data_glossary
+  FOR DELETE USING (auth.role() = 'authenticated');

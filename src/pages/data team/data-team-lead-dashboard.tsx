@@ -203,7 +203,7 @@ export default function DataTeamLeadDashboard() {
         // Convert users to team members format
         const membersWithPermissions = (teamUsersData || []).map(user => ({
           id: user.firebase_uid,
-          name: user.name || 'Unknown User',
+          name: user.name || 'Unassigned',
           email: user.email,
           role: user.role,
           status: 'active',
@@ -1116,13 +1116,22 @@ export default function DataTeamLeadDashboard() {
                               {issue.assignee ? (
                                 (() => {
                                   const assignedUser = users.find(user => user.firebase_uid === issue.assignee)
-                                  return assignedUser?.name || assignedUser?.email || 'Unknown User'
+                                  return assignedUser?.name || assignedUser?.email || 'Unassigned'
                                 })()
                               ) : (
                                 <span className="text-gray-500">Unassigned</span>
                               )}
                             </TableCell>
-                            <TableCell>{issue.date_created}</TableCell>
+                            <TableCell>
+                              {issue.date_created 
+                                ? new Date(issue.date_created).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric'
+                                  })
+                                : 'N/A'
+                              }
+                            </TableCell>
                             <TableCell>
                               <ActionDropdown
                                 itemId={issue.issue_id}
@@ -1568,8 +1577,6 @@ export default function DataTeamLeadDashboard() {
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* Floating Action Button removed - using users table instead */}
     </div>
   )
 }
