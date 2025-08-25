@@ -2,6 +2,9 @@
 
 A comprehensive dashboard system for managing compliance operations, strategic insights, and data team operations.
 
+# Running Instructions
+Run this repository with the SyncMate_Functions Repository.
+
 ## Features
 
 ### Dashboards
