@@ -330,6 +330,65 @@ export type Database = {
           }
         ]
       }
+      data_glossary: {
+        Row: {
+          id: number
+          term: string
+          definition: string
+          source_columns: string[] | null
+          data_types: string[] | null
+          sample_values: string[] | null
+          synonyms: string[] | null
+          category: string | null
+          confidence: number | null
+          dataset_id: string
+          created_at: string | null
+          updated_at: string | null
+          source_file_id: string | null
+          source_filename: string | null
+        }
+        Insert: {
+          id?: number
+          term: string
+          definition: string
+          source_columns?: string[] | null
+          data_types?: string[] | null
+          sample_values?: string[] | null
+          synonyms?: string[] | null
+          category?: string | null
+          confidence?: number | null
+          dataset_id: string
+          created_at?: string | null
+          updated_at?: string | null
+          source_file_id?: string | null
+          source_filename?: string | null
+        }
+        Update: {
+          id?: number
+          term?: string
+          definition?: string
+          source_columns?: string[] | null
+          data_types?: string[] | null
+          sample_values?: string[] | null
+          synonyms?: string[] | null
+          category?: string | null
+          confidence?: number | null
+          dataset_id?: string
+          created_at?: string | null
+          updated_at?: string | null
+          source_file_id?: string | null
+          source_filename?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_glossary_source_file_id_fkey"
+            columns: ["source_file_id"]
+            isOneToOne: false
+            referencedRelation: "uploaded_files"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never

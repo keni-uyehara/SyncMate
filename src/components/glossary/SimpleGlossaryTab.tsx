@@ -5,9 +5,9 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
-import { glossaryService } from '../../lib/glossaryService';
-import type { GlossaryTerm } from '../../lib/glossaryService';
-import { Search, Filter, Download, RefreshCw, Loader2, Upload, FileText, Database, BookOpen } from 'lucide-react';
+import { supabaseGlossaryService } from '../../lib/supabaseGlossaryService';
+import type { GlossaryTerm } from '../../lib/supabaseGlossaryService';
+import { Search, Filter, Download, RefreshCw, Loader2, Database } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const SimpleGlossaryTab: React.FC = () => {
@@ -45,7 +45,7 @@ export const SimpleGlossaryTab: React.FC = () => {
     setIsProcessing(true);
 
     try {
-      const extractionResult = await glossaryService.extractGlossary({
+      const extractionResult = await supabaseGlossaryService.extractGlossary({
         datasetId: formData.datasetId,
         businessContext: formData.businessContext || undefined,
         extractionMode: formData.extractionMode,
@@ -67,7 +67,7 @@ export const SimpleGlossaryTab: React.FC = () => {
     
     setLoading(true);
     try {
-      const glossaryTerms = await glossaryService.getGlossaryTerms(formData.datasetId);
+      const glossaryTerms = await supabaseGlossaryService.getGlossaryTerms(formData.datasetId);
       setTerms(glossaryTerms);
     } catch (error) {
       console.error('Failed to load glossary terms:', error);
@@ -137,117 +137,7 @@ export const SimpleGlossaryTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Glossary Extractor */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BookOpen className="h-5 w-5" />
-              Extract Business Terms
-            </CardTitle>
-            <CardDescription>
-              Upload data files to automatically extract business terms and create a data glossary
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Dataset ID</label>
-                <Input
-                  value={formData.datasetId}
-                  onChange={(e) => setFormData(prev => ({ ...prev, datasetId: e.target.value }))}
-                  placeholder="Enter dataset identifier (e.g., customer_data_2024)"
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Business Context (Optional)</label>
-                <textarea
-                  value={formData.businessContext}
-                  onChange={(e) => setFormData(prev => ({ ...prev, businessContext: e.target.value }))}
-                  placeholder="Describe the business context, domain, or specific use case..."
-                  rows={3}
-                  className="w-full p-2 border rounded-lg text-sm"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Extraction Mode</label>
-                <Select
-                  value={formData.extractionMode}
-                  onValueChange={(value: 'basic' | 'comprehensive') => 
-                    setFormData(prev => ({ ...prev, extractionMode: value }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="comprehensive">Comprehensive</SelectItem>
-                    <SelectItem value="basic">Basic</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Upload File</label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                  <input
-                    type="file"
-                    onChange={handleFileSelect}
-                    accept=".csv,.xlsx,.xls,.json,.pdf,.txt"
-                    className="hidden"
-                    id="file-upload"
-                    required
-                  />
-                  <div className="space-y-2">
-                    <Upload className="h-8 w-8 mx-auto text-gray-400" />
-                    <p className="text-sm text-gray-600">
-                      {formData.file ? (
-                        <span className="text-green-600 font-medium">
-                          ✓ {formData.file.name} ({(formData.file.size / 1024 / 1024).toFixed(2)} MB)
-                        </span>
-                      ) : (
-                        'Click to select or drag and drop a file'
-                      )}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Supports CSV, Excel, JSON, PDF, and text files (max 50MB)
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => document.getElementById('file-upload')?.click()}
-                    className="mt-2"
-                  >
-                    Select File
-                  </Button>
-                </div>
-              </div>
-              
-              <Button
-                type="submit"
-                disabled={isProcessing || !formData.file || !formData.datasetId}
-                className="w-full"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <FileText className="h-4 w-4 mr-2" />
-                    Extract Glossary Terms
-                  </>
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
+      <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
         {/* Glossary Viewer */}
         <Card>
           <CardHeader>

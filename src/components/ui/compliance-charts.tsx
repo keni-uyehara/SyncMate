@@ -42,6 +42,14 @@ interface ChartData {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
+// Status-specific colors for better visualization
+const STATUS_COLORS = {
+  'Open': '#FFBB28',      // Yellow for open issues
+  'In Progress': '#0088FE', // Blue for in progress
+  'Closed': '#00C49F',    // Green for closed issues
+  'default': '#8884D8'    // Purple for any other status
+};
+
 export function ComplianceCharts() {
   const [chartData, setChartData] = useState<ChartData>({
     issueTrends: [],
@@ -161,16 +169,25 @@ export function ComplianceCharts() {
       .map(([name, value]) => ({ name, value }))
       .filter((item) => item.name !== 'Unknown');
 
-    // Group by status
+    // Group by status with better handling
     const statusCounts = validIssues.reduce((acc, issue) => {
       const status = issue.status || 'Open';
-      acc[status] = (acc[status] || 0) + 1;
+      // Normalize status names for consistency
+      const normalizedStatus = status.trim();
+      acc[normalizedStatus] = (acc[normalizedStatus] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
     const statusDistribution = Object.entries(statusCounts)
       .map(([name, value]) => ({ name, value }))
-      .filter((item) => item.name !== 'Unknown');
+      .filter((item) => item.name && item.name !== 'Unknown')
+      .sort((a, b) => {
+        // Sort by priority: Open first, then In Progress, then Closed
+        const priority = { 'Open': 1, 'In Progress': 2, 'Closed': 3 };
+        const aPriority = priority[a.name as keyof typeof priority] || 4;
+        const bPriority = priority[b.name as keyof typeof priority] || 4;
+        return aPriority - bPriority;
+      });
 
     return {
       issueTrends,
@@ -392,17 +409,30 @@ export function ComplianceCharts() {
                 dataKey="value"
                 paddingAngle={2}
               >
-                {chartData.statusDistribution.map((_entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                {chartData.statusDistribution.map((entry, index) => (
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={STATUS_COLORS[entry.name as keyof typeof STATUS_COLORS] || STATUS_COLORS.default} 
+                  />
                 ))}
               </Pie>
               <Tooltip 
+                formatter={(value: any, name: any) => [`${value} issues`, name]}
                 contentStyle={{
                   backgroundColor: 'white',
                   border: '1px solid #e2e8f0',
                   borderRadius: '8px',
                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                 }}
+              />
+              <Legend 
+                wrapperStyle={{ paddingTop: '20px' }}
+                iconType="circle"
+                formatter={(value: any) => (
+                  <span style={{ color: '#374151', fontSize: '12px' }}>
+                    {value}
+                  </span>
+                )}
               />
             </PieChart>
           </ResponsiveContainer>

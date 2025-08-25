@@ -52,7 +52,7 @@ class GlossaryService {
 
   constructor() {
     // Use the API base URL from environment variables
-    this.baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5173';
+    this.baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
   }
 
   async extractGlossary(request: ExtractionRequest): Promise<ProcessingResult> {
