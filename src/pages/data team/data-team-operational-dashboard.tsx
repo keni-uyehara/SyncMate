@@ -20,6 +20,7 @@ import { Pagination } from "@/components/ui/pagination"
 import { supabase } from "@/supabaseClient"
 import type { Database } from "@/types/database.types"
 import { doLogout } from "@/utils/logout"
+import { SimpleGlossaryTab } from "@/components/glossary/SimpleGlossaryTab"
 
 import {
   AlertTriangle,
@@ -2218,325 +2219,165 @@ ${context}`
 
 
           {/* AI Insights Tab */}
-        <TabsContent value="ai-insights" className="space-y-6 mt-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Generated Compliance Report */}
-            <Card className="lg:col-span-2 shadow-sm">
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg font-semibold">Generated Compliance Report</CardTitle>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="text-xs bg-transparent" onClick={generateAIInsights} disabled={aiLoading}>
-                      {aiLoading ? 'Generating…' : '🔄 Regenerate'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs bg-transparent"
-                      onClick={() => {
-                        const payload = {
-                          generatedAt: aiGeneratedAt || new Date().toISOString(),
-                          executiveSummary: aiExecutiveSummary,
-                          highPriorityRecommendations: aiHighPriority,
-                          mediumPriorityActions: aiMediumPriority,
-                          strategicOpportunities: aiStrategicOpportunities,
-                          impact: aiImpact,
-                        }
-                        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-                        const url = URL.createObjectURL(blob)
-                        const a = document.createElement('a')
-                        a.href = url
-                        a.download = `ai-insights-${Date.now()}.json`
-                        a.click()
-                        URL.revokeObjectURL(url)
-                      }}
-                      disabled={aiLoading}
-                    >
-                      📤 Export
-                    </Button>
+          <TabsContent value="ai-insights" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Generated Compliance Report */}
+              <Card className="lg:col-span-2 shadow-sm">
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg font-semibold">Generated Compliance Report</CardTitle>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" className="text-xs bg-transparent" onClick={generateAIInsights} disabled={aiLoading}>
+                        {aiLoading ? 'Generating…' : '🔄 Regenerate'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs bg-transparent"
+                        onClick={() => {
+                          const payload = {
+                            generatedAt: aiGeneratedAt || new Date().toISOString(),
+                            executiveSummary: aiExecutiveSummary,
+                            highPriorityRecommendations: aiHighPriority,
+                            mediumPriorityActions: aiMediumPriority,
+                            strategicOpportunities: aiStrategicOpportunities,
+                            impact: aiImpact,
+                          }
+                          const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+                          const url = URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = `ai-insights-${Date.now()}.json`
+                          a.click()
+                          URL.revokeObjectURL(url)
+                        }}
+                        disabled={aiLoading}
+                      >
+                        📤 Export
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                <CardDescription className="text-sm text-gray-600">
-                  {aiError ? (
-                    <span className="text-red-600">{aiError}</span>
+                  <CardDescription className="text-sm text-gray-600">
+                    {aiError ? (
+                      <span className="text-red-600">{aiError}</span>
+                    ) : (
+                      'AI analysis of current compliance landscape and recommendations'
+                    )}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6 text-sm">
+                  {aiLoading ? (
+                    <div className="flex items-center justify-center py-10 text-gray-500">Generating AI insights…</div>
                   ) : (
-                    'AI analysis of current compliance landscape and recommendations'
-                  )}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6 text-sm">
-                {aiLoading ? (
-                  <div className="flex items-center justify-center py-10 text-gray-500">Generating AI insights…</div>
-                ) : (
-                  <>
-                    {/* Executive Summary */}
-                    <div>
-                      <h4 className="font-semibold text-purple-600 mb-2 text-base">Executive Summary</h4>
-                      <p className="text-gray-700 leading-relaxed">
-                        {aiExecutiveSummary || 'No summary available.'}
-                      </p>
-                    </div>
-
-                    {/* High Priority Recommendations */}
-                    <div className="border-l-4 border-red-500 pl-4 bg-red-50/50 py-3 rounded-r-lg">
-                      <h4 className="font-semibold text-red-600 mb-2 text-base">High Priority Recommendations</h4>
-                      <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
-                        {(aiHighPriority.length ? aiHighPriority : []).map((item, idx) => (
-                          <li key={idx}>{cleanRecommendationText(item)}</li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Medium Priority Actions */}
-                    <div className="border-l-4 border-yellow-500 pl-4 bg-yellow-50/50 py-3 rounded-r-lg">
-                      <h4 className="font-semibold text-yellow-600 mb-2 text-base">Medium Priority Actions</h4>
-                      <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
-                        {(aiMediumPriority.length ? aiMediumPriority : []).map((item, idx) => (
-                          <li key={idx}>{cleanRecommendationText(item)}</li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Strategic Opportunities */}
-                    <div className="border-l-4 border-green-500 pl-4 bg-green-50/50 py-3 rounded-r-lg">
-                      <h4 className="font-semibold text-green-600 mb-2 text-base">Strategic Opportunities</h4>
-                      <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
-                        {(aiStrategicOpportunities.length ? aiStrategicOpportunities : []).map((item, idx) => (
-                          <li key={idx}>{cleanRecommendationText(item)}</li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Predicted Impact */}
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <h4 className="font-semibold text-gray-800 mb-3 text-base">Predicted Impact</h4>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div className="text-center">
-                          <p className="text-xs text-blue-600 font-medium mb-1">Resolution Time Reduction:</p>
-                          <p className="font-bold text-lg text-blue-700">{aiImpact ? `${aiImpact.resolutionTimeReductionPercent}%` : '—'}</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs text-blue-600 font-medium mb-1">Compliance Score Improvement:</p>
-                          <p className="font-bold text-lg text-blue-700">{aiImpact ? `${aiImpact.complianceScoreImprovementPercent}%` : '—'}</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs text-blue-600 font-medium mb-1">Cross-Entity Synergy Score:</p>
-                          <p className="font-bold text-lg text-blue-700">{aiImpact ? `${aiImpact.synergyScoreDeltaPercent}%` : '—'}</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs text-blue-600 font-medium mb-1">Risk Mitigation:</p>
-                          <p className="font-bold text-lg text-blue-700">{aiImpact ? `${aiImpact.riskMitigationDeltaPercent}%` : '—'}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Report Footer */}
-                    <p className="text-xs text-gray-500 pt-2 border-t">
-                      Report generated on {aiGeneratedAt || new Date().toLocaleString()}
-                    </p>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* AI Assistant */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">🤖</div>
-                  <div>
-                    <CardTitle className="text-lg font-semibold">SyncMate AI Assistant</CardTitle>
-                    <CardDescription className="text-sm text-gray-600">
-                      Ask questions about compliance issues and get insights
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Assistant messages */}
-                <div className="space-y-3">
-                  <div className="flex items-end gap-2">
-                    <div className="flex-none w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs leading-none">
-                      🤖
-                    </div>
-                    <div className="bg-blue-50 p-3 rounded-lg text-sm">
-                      <p className="text-gray-700 leading-relaxed">
-                        Hello! I'm your SyncMate AI assistant. I can help you analyze compliance issues,
-                        explain resolution workflows, and provide insights about cross-entity data alignment.
-                        What would you like to know?
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-end justify-end gap-2">
-                    <div className="bg-gray-200 p-3 rounded-lg text-sm">
-                      <div className="flex items-start gap-2">
-                        <p className="text-gray-600 text-xs">
-                          What's causing the duplicate records issue with Ayala Land?
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex-none w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-xs leading-none">
-                      👤
-                    </div>
-                  </div>
-
-                  <div className="flex items-end gap-2">
-                    <div className="flex-none w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs leading-none">
-                      🤖
-                    </div>
-                    <div className="bg-blue-50 p-3 rounded-lg text-sm">
-                      <div className="flex items-start gap-2">
+                    <>
+                      {/* Executive Summary */}
+                      <div>
+                        <h4 className="font-semibold text-purple-600 mb-2 text-base">Executive Summary</h4>
                         <p className="text-gray-700 leading-relaxed">
-                          The duplicate records issue (COMP-001) stems from different customer ID formats between BPI's
-                          core banking system and Ayala Land's CRM.
+                          {aiExecutiveSummary || 'No summary available.'}
                         </p>
                       </div>
+
+                      {/* High Priority Recommendations */}
+                      <div className="border-l-4 border-red-500 pl-4 bg-red-50/50 py-3 rounded-r-lg">
+                        <h4 className="font-semibold text-red-600 mb-2 text-base">High Priority Recommendations</h4>
+                        <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
+                          {(aiHighPriority.length ? aiHighPriority : []).map((item, idx) => (
+                            <li key={idx}>{cleanRecommendationText(item)}</li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Medium Priority Actions */}
+                      <div className="border-l-4 border-yellow-500 pl-4 bg-yellow-50/50 py-3 rounded-r-lg">
+                        <h4 className="font-semibold text-yellow-600 mb-2 text-base">Medium Priority Actions</h4>
+                        <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
+                          {(aiMediumPriority.length ? aiMediumPriority : []).map((item, idx) => (
+                            <li key={idx}>{cleanRecommendationText(item)}</li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Strategic Opportunities */}
+                      <div className="border-l-4 border-green-500 pl-4 bg-green-50/50 py-3 rounded-r-lg">
+                        <h4 className="font-semibold text-green-600 mb-2 text-base">Strategic Opportunities</h4>
+                        <ul className="list-disc pl-5 space-y-1.5 text-gray-700">
+                          {(aiStrategicOpportunities.length ? aiStrategicOpportunities : []).map((item, idx) => (
+                            <li key={idx}>{cleanRecommendationText(item)}</li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Predicted Impact */}
+                      <div className="bg-blue-50 p-4 rounded-lg">
+                        <h4 className="font-semibold text-gray-800 mb-3 text-base">Predicted Impact</h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                          <div className="text-center">
+                            <p className="text-xs text-blue-600 font-medium mb-1">Resolution Time Reduction:</p>
+                            <p className="font-bold text-lg text-blue-700">{aiImpact ? `${aiImpact.resolutionTimeReductionPercent}%` : '—'}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-xs text-blue-600 font-medium mb-1">Compliance Score Improvement:</p>
+                            <p className="font-bold text-lg text-blue-700">{aiImpact ? `${aiImpact.complianceScoreImprovementPercent}%` : '—'}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-xs text-blue-600 font-medium mb-1">Cross-Entity Synergy Score:</p>
+                            <p className="font-bold text-lg text-blue-700">{aiImpact ? `${aiImpact.synergyScoreDeltaPercent}%` : '—'}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-xs text-blue-600 font-medium mb-1">Risk Mitigation:</p>
+                            <p className="font-bold text-lg text-blue-700">{aiImpact ? `${aiImpact.riskMitigationDeltaPercent}%` : '—'}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Report Footer */}
+                      <p className="text-xs text-gray-500 pt-2 border-t">
+                        Report generated on {aiGeneratedAt || new Date().toLocaleString()}
+                      </p>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* AI Assistant */}
+              <Card className="shadow-sm">
+                <CardHeader className="pb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">🤖</div>
+                    <div>
+                      <CardTitle className="text-lg font-semibold">SyncMate AI Assistant</CardTitle>
+                      <CardDescription className="text-sm text-gray-600">
+                        Ask questions about compliance issues and get insights
+                      </CardDescription>
                     </div>
                   </div>
-                </div>
-
-                {/* Input area */}
-                <div className="border-t pt-4">
-                  <div className="flex gap-2">
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-600">"What are the most common compliance issues this month?"</p>
+                    </div>
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <p className="text-sm text-blue-700">Based on the data, duplicate records and data definition mismatches are the most frequent issues, affecting 60% of flagged cases.</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
                     <input
                       type="text"
-                      placeholder="Ask me about compliance issues, resolution strategies, or data insights..."
-                      className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Ask a question..."
+                      className="w-full p-2 border rounded-lg text-sm"
                     />
-                    <Button size="sm" className="px-3">
-                      ➤
-                    </Button>
+                    <Button size="sm" className="w-full">Send</Button>
                   </div>
-                </div>
-
-                {/* Quick Actions */}
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-gray-600">Quick Actions:</p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
-                      Explain COMP-001
-                    </Button>
-                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
-                      Resolution Timeline
-                    </Button>
-                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
-                      Risk Assessment
-                    </Button>
-                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
-                      Best Practices
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Bottom Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Policy Alignment Simulation */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg font-semibold">Policy Alignment Simulation</CardTitle>
-                <CardDescription className="text-sm text-gray-600">
-                  AI-powered impact analysis of policy changes
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm">
-                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold text-green-800">Scenario: Unified SME Definition</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-xs">
-                      <div>
-                        <p className="text-gray-600">Predicted Outcome:</p>
-                        <p className="font-medium text-green-700">23% reduction in classification conflicts</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">Affected Records:</p>
-                        <p className="font-medium text-green-700">~45,000 customer profiles</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">Implementation Effort:</p>
-                        <p className="font-medium text-green-700">3-4 weeks</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">Compliance Impact:</p>
-                        <p className="font-medium text-green-700">+15% alignment score</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <Button size="sm" className="w-full bg-black text-white">
-                  Run New Simulation
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Collaboration Readiness Score */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg font-semibold">Collaboration Readiness Score</CardTitle>
-                <CardDescription className="text-sm text-gray-600">
-                  AI-powered impact analysis of policy changes
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">BPI ↔ Ayala Land</span>
-                      <span className="font-bold text-lg">95%</span>
-                    </div>
-                    <Progress value={95} className="h-2" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">BPI ↔ Globe</span>
-                      <span className="font-bold text-lg">78%</span>
-                    </div>
-                    <Progress value={78} className="h-2" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">BPI ↔ AC Energy</span>
-                      <span className="font-bold text-lg">92%</span>
-                    </div>
-                    <Progress value={92} className="h-2" />
-                  </div>
-                </div>
-
-                <p className="text-xs text-gray-500 pt-2 border-t">
-                  Scores are based on data alignment, policy compatibility, and historical collaboration success
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-
-
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
 
           {/* Data Glossary Tab */}
           <TabsContent value="data-glossary" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Data Glossary</CardTitle>
-                <CardDescription>Standardized definitions and data governance framework</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 flex items-center justify-center border-2 border-dashed border-gray-200 rounded-lg">
-                  <div className="text-center">
-                    <BookOpen className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-500">Data glossary and governance tools would appear here</p>
-                    <p className="text-sm text-gray-400">Standardized definitions, data lineage, and governance policies</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <SimpleGlossaryTab />
           </TabsContent>
         </Tabs>
       </div>
@@ -2560,15 +2401,15 @@ ${context}`
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="font-medium text-gray-600">Issue Type</p>
-                  <p>{selectedIssue.issue_type}</p>
+                  <p>{selectedIssue?.issue_type}</p>
                 </div>
                 <div>
                   <p className="font-medium text-gray-600">Affected Entity</p>
-                  <p>{selectedIssue.entity}</p>
+                  <p>{selectedIssue?.entity}</p>
                 </div>
                 <div>
                   <p className="font-medium text-gray-600">Severity</p>
-                  <StatusBadge status={selectedIssue.severity || "unknown"} variant="severity" />
+                  <StatusBadge status={selectedIssue?.severity || "unknown"} variant="severity" />
                 </div>
                 <div>
                   <p className="font-medium text-gray-600">Detection Confidence</p>
@@ -2620,9 +2461,9 @@ ${context}`
                   <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                     <h3 className="font-semibold text-lg mb-3">System Recommendation</h3>
                     <p className="text-gray-700">
-                      {selectedIssue.issue_type?.toLowerCase().includes('duplicate') 
+                      {selectedIssue?.issue_type?.toLowerCase().includes('duplicate') 
                         ? "Apply automated deduplication using 'keep most recent' strategy with transaction history preservation."
-                        : autoDetectionDetails.recommendations[0] || "Review and resolve the compliance issue according to standard procedures."
+                        : autoDetectionDetails?.recommendations[0] || "Review and resolve the compliance issue according to standard procedures."
                       }
                     </p>
                   </div>
@@ -2631,7 +2472,7 @@ ${context}`
                   <div>
                     <h3 className="font-semibold text-lg mb-3">Additional Recommendations</h3>
                     <ul className="space-y-2">
-                      {autoDetectionDetails.recommendations.slice(1).map((recommendation, index) => (
+                      {autoDetectionDetails?.recommendations.slice(1).map((recommendation, index) => (
                         <li key={index} className="flex items-start gap-2">
                           <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
                           <span className="text-gray-700">{cleanRecommendationText(recommendation)}</span>
@@ -2647,16 +2488,16 @@ ${context}`
                       <div>
                         <span className="font-medium">Risk Level:</span>
                         <Badge 
-                          variant={autoDetectionDetails.riskLevel === 'high' ? 'destructive' : 
-                                 autoDetectionDetails.riskLevel === 'medium' ? 'default' : 'secondary'}
+                          variant={autoDetectionDetails?.riskLevel === 'high' ? 'destructive' : 
+                                 autoDetectionDetails?.riskLevel === 'medium' ? 'default' : 'secondary'}
                           className="ml-2"
                         >
-                          {autoDetectionDetails.riskLevel.toUpperCase()}
+                          {autoDetectionDetails?.riskLevel?.toUpperCase()}
                         </Badge>
                       </div>
                       <div>
                         <span className="font-medium">Confidence Score:</span>
-                        <span className="ml-2 font-semibold">{autoDetectionDetails.confidence}%</span>
+                        <span className="ml-2 font-semibold">{autoDetectionDetails?.confidence}%</span>
                       </div>
                     </div>
                   </div>
@@ -2748,7 +2589,7 @@ ${context}`
                   </div>
                   
                   <div className="flex justify-end">
-                    <Button onClick={() => generateResolutionActions(resolutionIssue)} disabled={resolutionLoading}>
+                    <Button onClick={() => resolutionIssue && generateResolutionActions(resolutionIssue)} disabled={resolutionLoading}>
                       {resolutionLoading ? 'Analyzing...' : 'Generate Resolution Actions'}
                     </Button>
                   </div>
@@ -2760,7 +2601,7 @@ ${context}`
                   <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
                     <h3 className="font-semibold text-lg mb-3">Select Resolution Action</h3>
                     <p className="text-sm text-gray-600 mb-4">
-                      Choose the most appropriate action to resolve this {resolutionIssue.issue_type} issue:
+                      Choose the most appropriate action to resolve this {resolutionIssue?.issue_type} issue:
                     </p>
                     
                     <div className="space-y-2">
@@ -2828,7 +2669,7 @@ ${context}`
                     <div className="space-y-3">
                       <div className="flex items-center gap-2 text-green-700">
                         <CheckCircle className="w-5 h-5" />
-                        <span>Issue {resolutionIssue.issue_id} has been successfully resolved</span>
+                        <span>Issue {resolutionIssue?.issue_id} has been successfully resolved</span>
                       </div>
                       <div className="text-sm text-gray-600">
                         <p><strong>Action taken:</strong> {selectedAction}</p>
