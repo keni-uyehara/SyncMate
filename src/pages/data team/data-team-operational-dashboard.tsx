@@ -21,6 +21,8 @@ import { supabase } from "@/supabaseClient"
 import type { Database } from "@/types/database.types"
 import { doLogout } from "@/utils/logout"
 import { SimpleGlossaryTab } from "@/components/glossary/SimpleGlossaryTab"
+import { createSession as apiCreateSession, sendMessage as apiSendMessage, getMessages as apiGetMessages } from "@/lib/chatbot-client";
+import ChatbotModal from "@/components/ChatbotModal"; // if you want to open the modal from the dashboard
 
 import {
   AlertTriangle,
@@ -60,11 +62,12 @@ export default function DataTeamOperationalDashboard() {
   const [generatingDetails, setGeneratingDetails] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [summarizer, setSummarizer] = useState<any>(null)
-  const [assistantInput, setAssistantInput] = useState("");
-const [assistantBusy, setAssistantBusy] = useState(false);
-const [assistantMsgs, setAssistantMsgs] = useState<{ role: "user" | "ai"; text: string }[]>([
-  { role: "ai", text: "Hello! I can analyze your compliance issues. Ask me anything." }
-]);
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null);
+  const [assistantInput, setAssistantInput] = useState("");          // if you don't already have it
+  const [assistantBusy, setAssistantBusy] = useState(false);         // if you don't already have it
+  const [assistantMsgs, setAssistantMsgs] = useState<{ role: "user" | "ai"; text: string }[]>([]);
+  const [chatbotOpen, setChatbotOpen] = useState(false);             // if you want a modal button on the page
+
 
   // Removed unused pipeline loading state
   const rowsPerPage = 5
@@ -861,32 +864,37 @@ async function askAssistant(prompt?: string) {
   setAssistantBusy(true);
 
   try {
-    let aiQuery = supabase
-      .from("compliance_issues")
-      .select("*")
-      .order("date_created", { ascending: false })
-      .limit(30);
+    // 1) Ensure a persistent chat session for the dashboard
+    let sid = chatSessionId;
+    if (!sid) {
+      const { session } = await apiCreateSession("Dashboard Chat");
+      sid = session.id;
+      setChatSessionId(sid);
 
-    if (currentUserRole !== 'dataTeamLead' && currentUserRole !== 'teamLead' && currentUser?.uid) {
-      aiQuery = aiQuery.eq('assignee', currentUser.uid);
+      // (Optional) Load any existing messages (fresh session will have none)
+      const { messages } = await apiGetMessages(sid);
+      if (messages?.length) {
+        // Map server messages into your local UI shape
+        const mapped = messages.map(m => ({
+          role: m.role === "assistant" ? "ai" : "user",
+          text: m.content,
+        })) as { role: "user" | "ai"; text: string }[];
+        setAssistantMsgs(prev => [...prev, ...mapped]);
+      }
     }
 
-    const { data: latest, error: issuesErr } = await aiQuery;
-    if (issuesErr) throw new Error(issuesErr.message);
+    // 2) Send the message to your backend (Gemini + glossary context live there)
+    const { aiMessage } = await apiSendMessage(sid!, q);
 
-    const ctx = buildIssuesContext((latest || []) as ComplianceIssue[]);
-    const model = getGeminiModel();
-    const res = await model!.generateContent(
-      `You are a compliance assistant.\nContext:\n${ctx}\n\nUser question:\n${q}\n\nAnswer briefly and concretely.`
-    );
-    const text = res.response.text();
-    setAssistantMsgs(m => [...m, { role: "ai", text }]);
+    // 3) Show reply
+    setAssistantMsgs(m => [...m, { role: "ai", text: aiMessage.content }]);
   } catch (e: any) {
     setAssistantMsgs(m => [...m, { role: "ai", text: `Error: ${e?.message || e}` }]);
   } finally {
     setAssistantBusy(false);
   }
 }
+
   type AIInsightsResponse = {
     executiveSummary: string
     highPriorityRecommendations: string[]
@@ -2368,23 +2376,46 @@ ${context}`
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-3">
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-sm text-gray-600">"What are the most common compliance issues this month?"</p>
-                    </div>
-                    <div className="p-3 bg-blue-50 rounded-lg">
-                      <p className="text-sm text-blue-700">Based on the data, duplicate records and data definition mismatches are the most frequent issues, affecting 60% of flagged cases.</p>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <input
-                      type="text"
-                      placeholder="Ask a question..."
-                      className="w-full p-2 border rounded-lg text-sm"
-                    />
-                    <Button size="sm" className="w-full">Send</Button>
-                  </div>
-                </CardContent>
+  {/* Messages */}
+  <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+    {assistantMsgs.map((m, i) => (
+      <div
+        key={i}
+        className={
+          m.role === "user"
+            ? "ml-auto max-w-[85%] rounded-lg bg-blue-600 text-white px-3 py-2 text-sm"
+            : "mr-auto max-w-[85%] rounded-lg bg-gray-100 text-gray-900 px-3 py-2 text-sm"
+        }
+      >
+        {m.text}
+      </div>
+    ))}
+  </div>
+
+  {/* Composer */}
+  <div className="flex items-center gap-2">
+    <input
+      type="text"
+      placeholder={assistantBusy ? "Thinking…" : "Ask a question about compliance..."}
+      className="w-full p-2 border rounded-lg text-sm"
+      value={assistantInput}
+      onChange={(e) => setAssistantInput(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") askAssistant();
+      }}
+      disabled={assistantBusy}
+    />
+    <Button
+      size="sm"
+      className="min-w-[80px]"
+      onClick={() => askAssistant()}
+      disabled={assistantBusy || !assistantInput.trim()}
+    >
+      {assistantBusy ? "Sending…" : "Send"}
+    </Button>
+  </div>
+</CardContent>
+
               </Card>
             </div>
           </TabsContent>

@@ -1,3 +1,4 @@
+// /src/components/ChatbotModal.tsx
 "use client";
 
 import * as React from "react";
@@ -6,34 +7,64 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { createSession, getMessages, sendMessage } from "@/lib/chatbot-client";
 
-type ChatbotModalProps = {
-  isOpen: boolean;
-  onClose: () => void;
-};
-
+type ChatbotModalProps = { isOpen: boolean; onClose: () => void };
 type Msg = { role: "user" | "assistant"; text: string };
 
 export default function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
   const [messages, setMessages] = React.useState<Msg[]>([
-    { role: "assistant", text: "Hi! Ask me about compliance issues, workflows, or glossary terms." }
+    { role: "assistant", text: "Hi! Ask me about compliance issues, workflows, or glossary terms." },
   ]);
   const [draft, setDraft] = React.useState("");
+  const [sessionId, setSessionId] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
 
-  function send() {
-    const text = draft.trim();
-    if (!text) return;
-    setMessages((m) => [...m, { role: "user", text }]);
-    setDraft("");
+  // Create a session the first time it opens
+  React.useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    (async () => {
+      try {
+        const { session } = await createSession("SyncMate Chat");
+        if (!active) return;
+        setSessionId(session.id);
+        const { messages } = await getMessages(session.id);
+        if (!active) return;
+        if (messages?.length) {
+          setMessages([
+            { role: "assistant", text: "Session restored. How can I help?" },
+            ...messages.map(m => ({ role: m.role, text: m.content }) as Msg),
+          ]);
+        }
+      } catch (e) {
+        // keep silent; show initial greeting
+      }
+    })();
+    return () => { active = false; };
+  }, [isOpen]);
 
-    // TODO: Replace this with your real backend call
-    setTimeout(() => {
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", text: "Thanks! (This is a stubbed reply. Wire me to your API.)" }
-      ]);
-    }, 300);
+  async function send() {
+  const text = draft.trim();
+  if (!text || !sessionId || busy) return;
+
+  setMessages(m => [...m, { role: "user", text }]);
+  setDraft("");
+  setBusy(true);
+
+  try {
+    // ⬇️ This line changed: we now read aiMessage instead of response
+    const { aiMessage } = await sendMessage(sessionId, text);
+
+    // ⬇️ And we render aiMessage.content
+    setMessages(m => [...m, { role: "assistant", text: aiMessage.content }]);
+  } catch (e: any) {
+    setMessages(m => [...m, { role: "assistant", text: `Error: ${e?.message || e}` }]);
+  } finally {
+    setBusy(false);
   }
+}
+
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -68,12 +99,13 @@ export default function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
 
           <div className="mt-3 flex items-center gap-2">
             <Input
-              placeholder="Type your question…"
+              placeholder={busy ? "Thinking…" : "Type your question…"}
+              disabled={busy}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && send()}
             />
-            <Button onClick={send}>
+            <Button onClick={send} disabled={busy || !draft.trim()}>
               <Send className="h-4 w-4" />
             </Button>
           </div>
