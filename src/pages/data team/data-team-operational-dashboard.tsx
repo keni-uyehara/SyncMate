@@ -60,6 +60,12 @@ export default function DataTeamOperationalDashboard() {
   const [generatingDetails, setGeneratingDetails] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [summarizer, setSummarizer] = useState<any>(null)
+  const [assistantInput, setAssistantInput] = useState("");
+const [assistantBusy, setAssistantBusy] = useState(false);
+const [assistantMsgs, setAssistantMsgs] = useState<{ role: "user" | "ai"; text: string }[]>([
+  { role: "ai", text: "Hello! I can analyze your compliance issues. Ask me anything." }
+]);
+
   // Removed unused pipeline loading state
   const rowsPerPage = 5
 
@@ -743,7 +749,41 @@ export default function DataTeamOperationalDashboard() {
     const tail = `Focus on duplicates, mismatches, threshold violations, and policy issues. Be specific and non-generic.`
     return `${head}\n\n${mapped}\n\n${tail}`
   }
+async function askAssistant(prompt?: string) {
+  const q = (prompt ?? assistantInput).trim();
+  if (!q || assistantBusy) return;
 
+  setAssistantInput("");
+  setAssistantMsgs(m => [...m, { role: "user", text: q }]);
+  setAssistantBusy(true);
+
+  try {
+    let aiQuery = supabase
+      .from("compliance_issues")
+      .select("*")
+      .order("date_created", { ascending: false })
+      .limit(30);
+
+    if (currentUserRole !== 'dataTeamLead' && currentUserRole !== 'teamLead' && currentUser?.uid) {
+      aiQuery = aiQuery.eq('assignee', currentUser.uid);
+    }
+
+    const { data: latest, error: issuesErr } = await aiQuery;
+    if (issuesErr) throw new Error(issuesErr.message);
+
+    const ctx = buildIssuesContext((latest || []) as ComplianceIssue[]);
+    const model = getGeminiModel();
+    const res = await model!.generateContent(
+      `You are a compliance assistant.\nContext:\n${ctx}\n\nUser question:\n${q}\n\nAnswer briefly and concretely.`
+    );
+    const text = res.response.text();
+    setAssistantMsgs(m => [...m, { role: "ai", text }]);
+  } catch (e: any) {
+    setAssistantMsgs(m => [...m, { role: "ai", text: `Error: ${e?.message || e}` }]);
+  } finally {
+    setAssistantBusy(false);
+  }
+}
   type AIInsightsResponse = {
     executiveSummary: string
     highPriorityRecommendations: string[]
@@ -2200,82 +2240,57 @@ ${context}`
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Assistant messages */}
-                <div className="space-y-3">
-                  <div className="flex items-end gap-2">
-                    <div className="flex-none w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs leading-none">
-                      🤖
+              {/* Messages */}
+              <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                {assistantMsgs.map((m, i) => (
+                  <div key={i} className={m.role === "ai" ? "flex items-end gap-2" : "flex items-end justify-end gap-2"}>
+                    {m.role === "ai" && <div className="flex-none w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs">🤖</div>}
+                    <div className={m.role === "ai" ? "bg-blue-50 p-3 rounded-lg text-sm max-w-[80%]" : "bg-gray-200 p-3 rounded-lg text-sm max-w-[80%]"}>
+                      <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{m.text}</p>
                     </div>
-                    <div className="bg-blue-50 p-3 rounded-lg text-sm">
-                      <p className="text-gray-700 leading-relaxed">
-                        Hello! I'm your SyncMate AI assistant. I can help you analyze compliance issues,
-                        explain resolution workflows, and provide insights about cross-entity data alignment.
-                        What would you like to know?
-                      </p>
-                    </div>
+                    {m.role === "user" && <div className="flex-none w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-xs">👤</div>}
                   </div>
+                ))}
+              </div>
 
-                  <div className="flex items-end justify-end gap-2">
-                    <div className="bg-gray-200 p-3 rounded-lg text-sm">
-                      <div className="flex items-start gap-2">
-                        <p className="text-gray-600 text-xs">
-                          What's causing the duplicate records issue with Ayala Land?
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex-none w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-xs leading-none">
-                      👤
-                    </div>
-                  </div>
-
-                  <div className="flex items-end gap-2">
-                    <div className="flex-none w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs leading-none">
-                      🤖
-                    </div>
-                    <div className="bg-blue-50 p-3 rounded-lg text-sm">
-                      <div className="flex items-start gap-2">
-                        <p className="text-gray-700 leading-relaxed">
-                          The duplicate records issue (COMP-001) stems from different customer ID formats between BPI's
-                          core banking system and Ayala Land's CRM.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+              {/* Input */}
+              <div className="border-t pt-4">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={assistantInput}
+                    onChange={e => setAssistantInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") askAssistant(); }}
+                    placeholder={assistantBusy ? "Thinking…" : "Ask about issues, workflows, risks…"}
+                    className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={assistantBusy}
+                  />
+                  <Button size="sm" className="px-3" onClick={() => askAssistant()} disabled={assistantBusy || !assistantInput.trim()}>
+                    {assistantBusy ? "…" : "➤"}
+                  </Button>
                 </div>
+              </div>
 
-                {/* Input area */}
-                <div className="border-t pt-4">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Ask me about compliance issues, resolution strategies, or data insights..."
-                      className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <Button size="sm" className="px-3">
-                      ➤
-                    </Button>
-                  </div>
+              {/* Quick Actions */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-gray-600">Quick Actions:</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" className="text-xs bg-transparent" onClick={() => askAssistant("Explain COMP-001 root cause and fix steps.")}>
+                    Explain COMP-001
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs bg-transparent" onClick={() => askAssistant("What’s the resolution timeline for high-severity duplicates?")}>
+                    Resolution Timeline
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs bg-transparent" onClick={() => askAssistant("Give me a risk assessment for current open issues.")}>
+                    Risk Assessment
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs bg-transparent" onClick={() => askAssistant("List best practices to prevent data definition mismatches.")}>
+                    Best Practices
+                  </Button>
                 </div>
+              </div>
+            </CardContent>
 
-                {/* Quick Actions */}
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-gray-600">Quick Actions:</p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
-                      Explain COMP-001
-                    </Button>
-                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
-                      Resolution Timeline
-                    </Button>
-                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
-                      Risk Assessment
-                    </Button>
-                    <Button variant="outline" size="sm" className="text-xs bg-transparent">
-                      Best Practices
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
             </Card>
           </div>
 
