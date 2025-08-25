@@ -2,10 +2,11 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Activity, BarChart3, Settings, Bell, User, Database } from "lucide-react"
+import { Activity, BarChart3, Settings, Bell, User, Database, LogOut } from "lucide-react"
 import TeamLeadDashboard from "../../pages/team lead/team-lead-compliance-dashboard"
 import InsightsDashboard from "../../pages/team lead/team-lead-insights-dashboard"
 import DataTeamOperationalDashboard from "../../pages/data team/data-team-operational-dashboard"
+import { doLogout } from "../../utils/logout"
 
 export default function DashboardNavigation() {
   const [activeView, setActiveView] = useState<"compliance" | "insights" | "data-team">("compliance")
@@ -51,14 +52,23 @@ export default function DashboardNavigation() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" title="Notifications">
               <Bell className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" title="Settings">
               <Settings className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" title="User Profile">
               <User className="w-4 h-4" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              title="Logout"
+              onClick={doLogout}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <LogOut className="w-4 h-4" />
             </Button>
           </div>
         </div>
