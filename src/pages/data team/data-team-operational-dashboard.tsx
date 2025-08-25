@@ -31,12 +31,9 @@ import {
   Target,
   X,
   CheckCircle,
-  BookOpen,
   LogOut,
   Loader2,
 } from "lucide-react"
-
-import { Select, SelectTrigger, SelectValue, SelectItem, SelectContent } from "@/components/ui/select"
 
 type ComplianceIssue = Database["public"]["Tables"]["compliance_issues"]["Row"]
 
@@ -1627,29 +1624,6 @@ ${context}`
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <DashboardHeader
-        title="Operational Analytics Dashboard"
-        actions={[
-          {
-            label: "Export Report",
-            icon: Download,
-            variant: "outline"
-          },
-          {
-            label: "Flag New Issue",
-            icon: AlertTriangle,
-            variant: "destructive"
-          },
-          {
-            label: "Logout",
-            icon: LogOut,
-            variant: "outline",
-            onClick: () => doLogout(), // <-- add this action
-          },
-        ]}
-      />
-
       <div className="p-6">
         {/* Key Performance Indicators */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

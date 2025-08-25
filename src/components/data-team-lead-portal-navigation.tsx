@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Settings, Bell, User, Users, Shield } from "lucide-react"
+import { Settings, Bell, User, Users, Shield, LogOut } from "lucide-react"
 import DataTeamLeadDashboard from "../pages/data team/data-team-lead-dashboard"
+import { doLogout } from "../utils/logout"
 
 export default function DataTeamLeadPortalNavigation({
   initialView,
@@ -48,20 +49,29 @@ export default function DataTeamLeadPortalNavigation({
 
           {/* Right: Icons */}
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" title="Notifications">
               <Bell className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" title="Team Members">
               <Users className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" title="Security">
               <Shield className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" title="Settings">
               <Settings className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" title="User Profile">
               <User className="w-4 h-4" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              title="Logout"
+              onClick={doLogout}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <LogOut className="w-4 h-4" />
             </Button>
           </div>
         </div>
