@@ -389,6 +389,57 @@ export type Database = {
           }
         ]
       }
+      gemini_evaluations: {
+        Row: {
+          id: string
+          firebase_uid: string | null
+          session_id: string | null
+          recommendation: string
+          context: string
+          attainability: number
+          relevance: number
+          specificity: number
+          actionability: number
+          overall_score: number
+          feedback: string | null
+          metadata: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          firebase_uid?: string | null
+          session_id?: string | null
+          recommendation: string
+          context: string
+          attainability: number
+          relevance: number
+          specificity: number
+          actionability: number
+          overall_score: number
+          feedback?: string | null
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          firebase_uid?: string | null
+          session_id?: string | null
+          recommendation?: string
+          context?: string
+          attainability?: number
+          relevance?: number
+          specificity?: number
+          actionability?: number
+          overall_score?: number
+          feedback?: string | null
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
