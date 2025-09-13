@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback, useRef } from "react";
 import { summarizeText, generateRecommendations as geminiGenerateRecommendations, getGeminiModel } from "@/lib/gemini"
 import { auth } from "@/firebaseConfig"
 import { Badge } from "@/components/ui/badge"

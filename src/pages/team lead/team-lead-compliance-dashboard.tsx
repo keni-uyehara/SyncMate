@@ -2,7 +2,7 @@
 // React + Express version (not Next.js)
 // If you use path aliases like "@/components", keep your tsconfig/vite config accordingly.
 
-import React, { useCallback, useRef, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,35 +64,23 @@ export default function TeamLeadDashboard() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // ---------- TABLE STATE ----------
-  const [recentReports, setRecentReports] = useState<RecentReport[]>([
-    {
-      id: "RPT-001",
-      name: "Weekly Compliance Summary",
-      entity: "BPI x Ayala Land",
-      uploadedBy: "Maria Santos",
-      uploadDate: "2024-01-15 09:30",
-      status: "Processed",
-      issues: 3,
-    },
-    {
-      id: "RPT-002",
-      name: "SME Classification Report",
-      entity: "BPI x Globe",
-      uploadedBy: "John Cruz",
-      uploadDate: "2024-01-14 14:20",
-      status: "Processing",
-      issues: 7,
-    },
-    {
-      id: "RPT-003",
-      name: "Green Loans Threshold Report",
-      entity: "BPI x AC Energy",
-      uploadedBy: "Ana Reyes",
-      uploadDate: "2024-01-13 11:45",
-      status: "Completed",
-      issues: 1,
-    },
-  ]);
+  const [recentReports, setRecentReports] = useState<RecentReport[]>([]);
+  useEffect(() => {
+  const fetchReports = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/reports`, {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Failed to fetch reports');
+      const data = await response.json();
+      console.log('Fetched reports:', data); // Add this
+      setRecentReports(data);
+    } catch (err) {
+      console.error('Failed to fetch reports:', err);
+    }
+  };
+  fetchReports();
+}, []);
 
   // ---------- HELPERS ----------
   const entityLabel = (value: string) => {
@@ -180,60 +168,51 @@ export default function TeamLeadDashboard() {
   }, []);
 
   const handleUpload = async () => {
-    const err = validate();
-    if (err) {
-      alert(err);
-      return;
+  const err = validate();
+  if (err) {
+    alert(err);
+    return;
+  }
+  if (!file) return;
+
+  setUploading(true);
+  const clear = kickFakeProgress();
+
+  try {
+    const fd = new FormData();
+    fd.append('entity', entity);
+    fd.append('reportType', reportType);
+    fd.append('period', period);
+    fd.append('file', file);
+
+    const res = await fetch(`${API_BASE}/api/reports/upload`, {
+      method: 'POST',
+      body: fd,
+      credentials: 'include', // Include cookies
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`Upload failed (${res.status}) ${txt}`);
     }
-    if (!file) return;
 
-    setUploading(true);
-    const clear = kickFakeProgress();
+    const data = await res.json();
+    setProgress(100);
 
-    try {
-      const fd = new FormData();
-      fd.append("entity", entity);
-      fd.append("reportType", reportType);
-      fd.append("period", period);
-      fd.append("file", file);
+    // Refresh the report list
+    const updatedReports = await (await fetch(`${API_BASE}/api/reports`, { credentials: 'include' })).json();
+    setRecentReports(updatedReports);
 
-      const res = await fetch(`${API_BASE}/api/reports/upload`, {
-        method: "POST",
-        body: fd,
-      });
-
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`Upload failed (${res.status}) ${txt}`);
-      }
-
-      const data = await res.json();
-
-      setProgress(100);
-
-      // Reflect in the table
-      const newRow: RecentReport = {
-        id: data.reportId ?? `RPT-${Math.floor(Math.random() * 900 + 100)}`,
-        name: data.reportName ?? file.name,
-        entity: data.entityLabel ?? entityLabel(entity),
-        uploadedBy: data.uploadedBy ?? "You",
-        uploadDate: new Date().toISOString().slice(0, 16).replace("T", " "),
-        status: "Processing",
-        issues: 0,
-      };
-      setRecentReports((prev) => [newRow, ...prev]);
-
-      // Reset just the file; keep other form selections
-      setFile(null);
-    } catch (e: any) {
-      console.error(e);
-      alert(e?.message || "Upload failed.");
-    } finally {
-      clear();
-      setUploading(false);
-      setTimeout(() => setProgress(0), 700);
-    }
-  };
+    setFile(null);
+  } catch (e: any) {
+    console.error(e);
+    alert(e?.message || 'Upload failed.');
+  } finally {
+    clear();
+    setUploading(false);
+    setTimeout(() => setProgress(0), 700);
+  }
+};
 
   return (
     <div className="min-h-screen bg-gray-50">
