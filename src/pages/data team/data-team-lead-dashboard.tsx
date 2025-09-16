@@ -16,7 +16,6 @@ import { ActionDropdown } from "@/components/ui/action-dropdown"
 import { Pagination } from "@/components/ui/pagination"
 import { supabase } from "@/supabaseClient"
 import type { Database } from "@/types/database.types"
-import AIEvaluationTab from "@/components/ai-evaluation-tab"
 
 import {
   AlertTriangle,
@@ -960,13 +959,12 @@ export default function DataTeamLeadDashboard() {
 
         {/* Main Content Tabs */}
         <Tabs defaultValue="user-management" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="user-management">User Management</TabsTrigger>
             <TabsTrigger value="issue-tracking">Issue Tracking</TabsTrigger>
             <TabsTrigger value="audit-trail">Audit Trail</TabsTrigger>
             <TabsTrigger value="performance">Performance</TabsTrigger>
             <TabsTrigger value="permissions">Permissions</TabsTrigger>
-            <TabsTrigger value="ai-evaluation">AI Evaluation</TabsTrigger>
           </TabsList>
 
           {/* User Management Tab */}
@@ -1462,11 +1460,6 @@ export default function DataTeamLeadDashboard() {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {/* AI Evaluation Tab */}
-          <TabsContent value="ai-evaluation" className="space-y-6">
-            <AIEvaluationTab />
           </TabsContent>
         </Tabs>
       </div>
